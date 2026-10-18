@@ -17,10 +17,14 @@ snapshot even if current award definitions later change.
    Store the PEM in your deployment secrets as `GITDOJO_CREDENTIAL_PRIVATE_KEY`. Literal `\n`
    separators are accepted. Never commit the private key. Set a unique, stable
    `GITDOJO_CREDENTIAL_KEY_ID`, such as `rsa-2026-01`.
-3. Apply migrations through `0007_assessed_capstone` with `pnpm --filter @gitdojo/web db:migrate` before
-   deploying the new app. The release health check expects this migration.
+3. Apply every migration, through `0008_certificate_revocation_audit`, with
+   `pnpm --filter @gitdojo/web db:migrate` before deploying the new app. The release health check
+   (`/api/health`) expects the latest one and reports a database that is behind.
 4. Keep `DATABASE_URL` configured. Issuance is unavailable without the account database,
-   identity provider, site origin, or signing key.
+   identity provider, site origin, or signing key. When the site origin or signing key is missing
+   or invalid, issuing returns `503 issuer_not_configured` with a plain message for the learner,
+   and the server log names the setting (never its value), for example
+   `GITDOJO_CREDENTIAL_PRIVATE_KEY is not a valid PEM private key`.
 
 The dashboard shows each award's progress: requirements done and left, and the next lesson or
 Practice task to finish, counted from the browser's progress as a guide. Before issuing, it asks
@@ -36,7 +40,8 @@ cannot be recalled or silently changed.
 
 ## Verification
 
-Every PDF prints its credential ID and the exact verification URL,
+Every PDF prints its credential ID and "Check current status at" the exact verification URL, so
+a printed copy never stands in for the live status. The URL is
 `<NEXT_PUBLIC_SITE_URL>/verify/<uuid>`, as selectable text, and its QR code encodes the same URL
 (`verificationUrl` in `lib/certificates/credential.ts`; the signed badge cites it as evidence and
 the dashboard's "Copy verification link" copies it). Long names wrap onto two lines rather than
@@ -69,9 +74,19 @@ The `/api/credentials` endpoint serves an RS256-signed OpenBadgeCredential JWT. 
 are retained in the database after key rotation. The badge includes a W3C Bitstring Status List entry; the matching
 signed status list is served in batches of 131,072 entries. Status lists use a 60-second cache.
 
-For an incorrect issuance, run `node apps/web/scripts/revoke-certificate.mjs <credential-uuid>`
-with database credentials in the environment. This updates both the verification page and the
-status list. Revocation is permanent.
+For an incorrect issuance, run from `apps/web`, with the database's migration credentials in the
+environment:
+
+```bash
+node scripts/revoke-certificate.mjs <credential-uuid> --by "<operator>" --reason "<why>"
+```
+
+`--by` is required and `--reason` is optional. Migration `0008_certificate_revocation_audit`
+stores both alongside the revocation time for GitDojo's own audit; they are never shown on the
+verification page, in badges or in the status list. Revocation is permanent and runs once: a
+second run reports "already revoked" and keeps the original time, operator and reason. It updates
+both the verification page and the status list. There is deliberately no web endpoint: learners
+can't revoke certificates, including their own, and only someone with database credentials can.
 
 **Claim boundary:** existing lesson and Practice completion endpoints accept learner-reported
 progress and validate the content ID. They do not independently replay exercise outcomes. The

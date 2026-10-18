@@ -164,15 +164,99 @@ pnpm dev            # http://localhost:3000, then open /learn
 | `pnpm test:e2e`         | Build, then run Playwright (desktop + mobile, with accessibility scans) |
 | `pnpm perf`             | Stress scenarios with timings (see docs/testing.md)                     |
 | `pnpm format`           | Format with Prettier                                                    |
-
-Accounts are optional. To try sign-in locally, copy `apps/web/.env.example` to
-`apps/web/.env.local` and follow [docs/authentication.md](docs/authentication.md); without it
-everything else works and the sign-in pages say accounts are unavailable. Server-side account
-progress additionally needs PostgreSQL: set `DATABASE_URL` and run `pnpm db:migrate`
-([docs/account-progress.md](docs/account-progress.md)).
+| `pnpm format:check`     | Check formatting, as CI does                                            |
+| `pnpm db:migrate`       | Apply database migrations to `DATABASE_URL` (accounts only)             |
 
 Before the first `pnpm test:e2e`, install a browser:
 `pnpm --filter @gitdojo/web exec playwright install chromium`.
+
+### Configuration
+
+Nothing needs configuring to learn: lessons, challenges, Practice, the playground and the local
+dashboard work with no environment variables. Accounts, account progress and certificates are
+opt-in. Copy `apps/web/.env.example` to `apps/web/.env.local` (git-ignored) and set what you need:
+
+| Variable                              | Purpose                                                            | Needed for                     | Secret |
+| ------------------------------------- | ------------------------------------------------------------------ | ------------------------------ | ------ |
+| `NEXT_PUBLIC_ASGARDEO_BASE_URL`       | WSO2 Identity Platform organization URL                            | Accounts                       | No     |
+| `NEXT_PUBLIC_ASGARDEO_CLIENT_ID`      | WSO2 application client ID                                         | Accounts                       | No     |
+| `ASGARDEO_CLIENT_SECRET`              | WSO2 application client secret                                     | Accounts                       | Yes    |
+| `ASGARDEO_SECRET`                     | Signs the session cookie (32+ characters)                          | Accounts                       | Yes    |
+| `DATABASE_URL`                        | PostgreSQL 13+ connection (pooled in production)                   | Account progress, certificates | Yes    |
+| `DATABASE_URL_UNPOOLED`               | Direct connection, used only by migrations                         | Migrations (optional)          | Yes    |
+| `NEXT_PUBLIC_SITE_URL`                | Permanent HTTPS origin, printed on certificates and their QR codes | Certificates                   | No     |
+| `GITDOJO_CREDENTIAL_KEY_ID`           | Stable ID of the badge signing key, e.g. `rsa-2026-01`             | Certificates                   | No     |
+| `GITDOJO_CREDENTIAL_PRIVATE_KEY`      | RSA private key (PEM) that signs Open Badges                       | Certificates                   | Yes    |
+| `GITDOJO_SELF_REGISTRATION`           | `disabled` when self sign-up is off                                | Optional                       | No     |
+| `ASGARDEO_SESSION_COOKIE_EXPIRY_TIME` | Session lifetime in seconds (default 86400)                        | Optional                       | No     |
+| `DATABASE_POOL_MAX`                   | Connections per server instance (1–20, default 5)                  | Optional                       | No     |
+| `GITDOJO_RATE_LIMIT_*`                | Request limits; see [docs/rate-limits.md](docs/rate-limits.md)     | Optional                       | No     |
+
+Never put a secret in a `NEXT_PUBLIC_` variable: those are bundled into browser code. Setup
+guides: [authentication](docs/authentication.md) (accounts, with a local mock identity provider
+for tests) and [account progress](docs/account-progress.md) (PostgreSQL). Without the account
+variables, the sign-in pages say accounts are unavailable and everything else works.
+
+### Database
+
+Account progress, certificates and the capstone need PostgreSQL 13 or later. Set `DATABASE_URL`,
+then run `pnpm db:migrate`; migrations live in `apps/web/db/migrations` and only move forward.
+`/api/health` reports a database that is missing a migration. Database integration tests run
+against a dedicated test database: `TEST_DATABASE_URL=... pnpm --filter @gitdojo/web test:db`
+([docs/account-progress.md](docs/account-progress.md)).
+
+## Certificates
+
+Signed-in learners can earn three **completion certificates**, and the separate server-graded
+[capstone](docs/assessment.md) can earn an **assessed** credential.
+
+- **Issuance** runs on the server against the account's stored completions, once per learner,
+  award and criteria version (a database constraint makes retries and concurrent requests safe).
+- **Completion certificates are learner-reported.** Lesson and Practice completions are recorded
+  from the browser, and only their content IDs are checked, so these certificates record
+  completion, not assessed skill. Only the capstone grades Git history on the server.
+- **PDF:** made on the server from the stored record. It shows the holder's name, issue date and
+  credential ID, plus the verification URL as text and as a QR code, and points readers there for
+  the current status.
+- **Verification:** `/verify/<id>` is public and reads the record on every request. It shows
+  **Valid** or **Revoked**, never cached or indexed. The holder's name appears only if they
+  agreed when the certificate was issued; otherwise it says "Name withheld by learner".
+- **Revocation:** an operator command, run with database credentials and never exposed on the web:
+  `node apps/web/scripts/revoke-certificate.mjs <id> --by "<operator>" --reason "<why>"`. The
+  operator and reason are kept for audit and never published.
+- **Open Badges 3.0:** each credential is also an RS256-signed OpenBadgeCredential with a
+  Bitstring Status List entry for revocation. It has not been through 1EdTech conformance
+  certification. The verification link and QR code are a lookup on GitDojo's site, not a
+  cryptographic proof; the signed badge is.
+
+Details, key generation and checks: [docs/certificates.md](docs/certificates.md).
+
+## Deployment
+
+GitDojo deploys to Vercel with a Neon PostgreSQL database and WSO2 Identity Platform. Pull
+requests get anonymous Vercel previews. When CI passes on `main`, the **Release** workflow
+migrates and deploys **staging**, smoke tests it and drafts a GitHub Release. Publishing that
+draft runs **Publish release**, which migrates and promotes **production**.
+
+Each environment has its own variables, set in Vercel (secrets marked Sensitive, never on
+Preview) and in the matching GitHub environment for migrations. The full guide, including
+first-time setup, smoke tests and rollback, is [docs/deployment.md](docs/deployment.md).
+[docs/repository-protection.md](docs/repository-protection.md) covers the GitHub settings that
+protect `main`, which have to be set in GitHub.
+
+## Troubleshooting
+
+| Symptom                                                      | Likely cause and fix                                                                                                                                      |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sign-in pages say accounts are unavailable                   | A WSO2 variable is missing, or `ASGARDEO_SECRET` is under 32 characters. Set them; restart `pnpm dev` (or redeploy) after changing `NEXT_PUBLIC_` values. |
+| Signed-in progress isn't saved, or `/api/health` returns 503 | `DATABASE_URL` is missing or wrong, or migrations weren't applied. Check the URL, then run `pnpm db:migrate`.                                             |
+| "Certificates can't be issued on this site yet"              | `NEXT_PUBLIC_SITE_URL` or a credential key setting is missing or invalid. The server log names which one (never its value).                               |
+| "Some completions have not reached your account yet"         | The account doesn't have every required completion yet. Let progress sync (stay signed in and online), then issue again.                                  |
+| A verification link shows "Credential not found"             | The ID is mistyped or incomplete: it's the 36 characters after `/verify/`.                                                                                |
+| `pnpm test:e2e` can't find a browser                         | Run `pnpm --filter @gitdojo/web exec playwright install chromium`.                                                                                        |
+| The editor never loads, or `/monaco/vs/loader.js` is a 404   | Use `pnpm dev` or `pnpm build`, which copy Monaco into `public/`; plain `next dev` doesn't.                                                               |
+
+More deployment failures and fixes: [docs/deployment.md](docs/deployment.md#common-failures).
 
 ## Monorepo structure
 
@@ -197,6 +281,7 @@ gitdojo/
 │   ├── courses/              course definitions (lesson order)
 │   ├── lessons/              lesson YAML files, one directory per course
 │   ├── challenges/           challenge YAML files
+│   ├── practice/             Practice mode task YAML files
 │   └── playground/           playground scenario YAML files
 └── docs/                     architecture and contributor guides
 ```
@@ -222,7 +307,10 @@ single YAML file. See:
   and revocation
 - [docs/assessment.md](docs/assessment.md): the server-graded Git capstone and assessed credential
 - [docs/testing.md](docs/testing.md): tests, accessibility review and performance results
-- [docs/ci.md](docs/ci.md): CI jobs, security scans, reports and branch protection
+- [docs/ci.md](docs/ci.md): CI jobs, security scans and reports
+- [docs/repository-protection.md](docs/repository-protection.md): rulesets for `main`, bypass and
+  how to test them
+- [docs/deployment.md](docs/deployment.md): Vercel, Neon and WSO2, releases and rollback
 - [docs/release-notes.md](docs/release-notes.md): writing the learner highlights for a release
 - [docs/theming.md](docs/theming.md): light and dark themes, tokens, and the terminal and editor
 - [docs/ui.md](docs/ui.md): the design system
@@ -252,7 +340,8 @@ single YAML file. See:
 - [x] Account-backed completion progress across devices
 - [x] Versioned completion certificates with PDF, signed Open Badge and public verification
 - [x] Server-graded Git capstone with an assessed skills credential
-- [ ] Remote repositories (`clone`, `fetch`, `pull`, `push`), then real GitHub
+- [x] Simulated remotes in the browser: `remote`, `fetch`, `pull` and `push`
+- [ ] Real remote repositories (`clone` over the network), then real GitHub
 
 ## License
 
