@@ -99,10 +99,32 @@ test("reset restores the original lesson state", async ({ page, isMobile }) => {
   await expect(page.getByTestId("terminal")).toContainText("fatal: not a git repository");
 });
 
-test("landing page links to the course list", async ({ page }) => {
+test("landing page starts a new learner at the first lesson", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Learn Git by doing.");
-  await page.getByRole("link", { name: "Start learning" }).first().click();
-  await expect(page).toHaveURL(/\/learn$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Learn Git");
+  await page.getByTestId("hero-start").click();
+  await expect(page).toHaveURL(/\/learn\/git-basics\/what-is-git$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("What is Git?");
+});
+
+test("every landing page link leads somewhere real", async ({ page, request }) => {
+  await page.goto("/");
+  const hrefs = await page
+    .locator("main a[href^='/'], footer a[href^='/'], header a[href^='/']")
+    .evaluateAll((links) => [...new Set(links.map((link) => link.getAttribute("href") ?? ""))]);
+  expect(hrefs.length).toBeGreaterThan(10);
+  for (const href of hrefs) {
+    const response = await request.get(href);
+    expect(response.status(), href).toBeLessThan(400);
+  }
+});
+
+test("a returning learner is offered to continue where they left off", async ({ page }) => {
+  await page.goto("/learn/branching/understanding-head");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.waitForSelector('html[data-progress="saved"]');
+  await page.goto("/");
+  const start = page.getByTestId("hero-start");
+  await expect(start).toHaveText(/Continue learning/);
+  await expect(start).toHaveAttribute("href", "/learn/branching/understanding-head");
 });

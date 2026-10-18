@@ -1,5 +1,6 @@
 import { Button } from "@gitdojo/ui";
 import Link from "next/link";
+import { type ReactNode } from "react";
 import { AccountControls } from "@/features/auth";
 import { ThemeToggle } from "@/features/theme";
 import { SITE } from "@/lib/site";
@@ -18,11 +19,12 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: "Docs", href: SITE.docsUrl, external: true },
 ];
 
-export function SiteHeader() {
+/** `action`: an extra call to action for this page (the landing page's "Start learning"). */
+export function SiteHeader({ action }: { action?: ReactNode } = {}) {
   return (
     <header className="sticky top-0 z-40 border-b border-border-subtle bg-app/90 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-[1280px] items-center justify-between gap-4 px-4 sm:px-6">
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-6">
           <Link href="/" aria-label="GitDojo home">
             <Logo />
           </Link>
@@ -49,11 +51,13 @@ export function SiteHeader() {
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          {action ? <div className="hidden sm:block">{action}</div> : null}
           <ThemeToggle />
           <Button asChild variant="secondary" size="sm">
             <a href={SITE.githubUrl} aria-label="Star GitDojo on GitHub">
               <GitHubIcon />
-              <span className="hidden lg:inline">Star on GitHub</span>
+              {/* With a page action there is no room for the label next to the full nav. */}
+              <span className={action ? "hidden" : "hidden lg:inline"}>Star on GitHub</span>
             </a>
           </Button>
           <AccountControls />
