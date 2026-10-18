@@ -75,8 +75,9 @@ export default function PrivacyPage() {
         <p>When you ask GitDojo to issue a certificate, it stores:</p>
         <ul>
           <li>
-            the certificate itself: your profile name at the time, the award and its criteria, the
-            issue date and your choice about showing your name publicly;
+            the certificate itself: the certificate name you entered on your GitDojo account page at
+            the time, the award and its criteria, the issue date and your choice about showing your
+            name publicly;
           </li>
           <li>for the Git capstone, the Git history you submit for grading and its result.</li>
         </ul>

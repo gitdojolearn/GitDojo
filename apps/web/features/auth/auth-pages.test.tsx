@@ -201,7 +201,7 @@ describe("/account", () => {
     expect(await redirectOf(AccountPage())).toBe("/sign-in?returnTo=%2Faccount");
   });
 
-  it("shows the profile and says progress stays in this browser", async () => {
+  it("shows the profile, certificate-name editor and account-progress explanation", async () => {
     configure();
     session.current = {
       status: "signed-in",
@@ -212,6 +212,9 @@ describe("/account", () => {
     expect(profile).toHaveTextContent("Ada Lovelace");
     expect(profile).toHaveTextContent("ada@example.com");
     expect(within(profile).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
-    expect(screen.getByText(/signing in or out never changes them/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Certificate name" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/signed-in learning progress syncs to your GitDojo account/),
+    ).toBeInTheDocument();
   });
 });

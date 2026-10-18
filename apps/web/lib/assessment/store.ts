@@ -11,6 +11,8 @@ import { type VerifiedIdentity } from "@/lib/auth/identity";
 import { upsertUser } from "@/lib/account-progress/postgres-store";
 import { prepareCredentialIssuer } from "@/lib/certificates/credential";
 import { getDatabase, type JsonValue, type QueryableDatabase } from "@/lib/db/client";
+import { issuableName } from "@/lib/certificates/certificate-name";
+import { certificateNameFor } from "@/lib/certificates/name-store";
 import { type Certificate } from "@/lib/certificates/store";
 import { gradeCapstone } from "./grader";
 import { CAPSTONE_CRITERIA, CAPSTONE_DESCRIPTION, CAPSTONE_TITLE } from "./rubric";
@@ -63,7 +65,11 @@ export async function submitAttempt(
   id: string,
   evidence: AssessmentEvidence,
   publicNameConsent: boolean,
-): Promise<{ grade: AssessmentGrade; credentialId: string | null; repeated: boolean } | null> {
+): Promise<
+  | { grade: AssessmentGrade; credentialId: string | null; repeated: boolean }
+  | { nameRequired: { reason: "missing" | "unprintable"; characters: string[] } }
+  | null
+> {
   const sql = getDatabase();
   const attempt = await ownedAttempt(sql, identity, id);
   if (!attempt) return null;
@@ -78,6 +84,12 @@ export async function submitAttempt(
       `;
       return { grade: current.result, credentialId: prior?.id ?? null, repeated: true };
     }
+    // A pass issues a credential with the learner's GitDojo certificate name. Without a usable
+    // one nothing is saved, so the same attempt can be submitted again once the name is added.
+    const name = grade.passed ? issuableName(await certificateNameFor(tx, current.user_id)) : null;
+    if (name && !name.ok) {
+      return { nameRequired: { reason: name.reason, characters: name.characters ?? [] } };
+    }
     await tx`
       UPDATE assessment_attempts
       SET status = ${grade.passed ? "passed" : "failed"}, submitted_at = now(),
@@ -87,9 +99,8 @@ export async function submitAttempt(
     `;
     if (!grade.passed) return { grade, credentialId: null, repeated: false };
 
-    const recipientName = identity.name?.trim();
-    if (!recipientName || recipientName.length < 2 || recipientName.length > 80)
-      throw new Error("printable profile name required");
+    if (!name?.ok) throw new Error("certificate name checked above");
+    const recipientName = name.recipientName;
     const assessedEvidence = {
       kind: "assessed" as const,
       title: CAPSTONE_TITLE,

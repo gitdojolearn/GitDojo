@@ -4,6 +4,7 @@ import { getVerifiedIdentity } from "@/lib/auth/identity";
 import { limitedJson } from "@/lib/http/limited-json";
 import { isSameOriginRequest } from "@/lib/http/same-origin";
 import { isUuid } from "@/lib/ids";
+import { nameRequiredMessage } from "@/lib/certificates/certificate-name";
 import { submitAttempt } from "@/lib/assessment/store";
 
 export const runtime = "nodejs";
@@ -37,6 +38,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       publicNameConsent,
     );
     if (!outcome) return Response.json({ error: "not_found" }, { status: 404, headers: PRIVATE });
+    if ("nameRequired" in outcome) {
+      const { reason, characters } = outcome.nameRequired;
+      return Response.json(
+        { error: "name_required", reason, message: nameRequiredMessage(reason, characters) },
+        { status: 422, headers: PRIVATE },
+      );
+    }
     return Response.json(outcome, { headers: PRIVATE });
   } catch {
     return Response.json({ error: "unavailable" }, { status: 503, headers: PRIVATE });

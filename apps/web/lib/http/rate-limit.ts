@@ -46,6 +46,7 @@ function scopeFor(request: NextRequest): RateLimitScope | null {
   if (pathname === "/api/certificates" || pathname.startsWith("/api/certificates/"))
     return "progress";
   if (pathname.startsWith("/api/credentials/")) return "progress";
+  if (pathname.startsWith("/api/account/")) return "progress";
   return null;
 }
 

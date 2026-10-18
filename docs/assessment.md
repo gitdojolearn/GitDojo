@@ -24,5 +24,7 @@ creates a credential with `credential_kind = 'assessed'`; it never changes the t
 awards or treats learner-reported progress as assessment evidence.
 
 The public verification page and signed Open Badge identify the credential as server-graded and
-show the rubric results. As with completion certificates, the account profile name is not an
-independent legal-identity verification.
+show the rubric results. The certificate name is taken from the learner's GitDojo account page,
+not from the identity provider, and is not an independent legal-identity verification. A passing
+attempt is not saved until the learner has entered a printable certificate name; after adding one,
+they can submit that same attempt again.

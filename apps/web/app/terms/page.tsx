@@ -37,7 +37,8 @@ export default function TermsPage() {
         <h2 id="accounts">Accounts</h2>
         <p>
           You don&apos;t need an account to learn. If you create one, keep your sign-in details to
-          yourself and use a real name in your profile if you want it on certificates. How account
+          yourself and enter the certificate name on your GitDojo account page if you want to earn a
+          certificate. The name is not imported from your identity-provider profile. How account
           data is handled is described in the <Link href="/privacy">privacy notice</Link>.
         </p>
       </section>

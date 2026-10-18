@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site/site-header";
 import { AccountAvatar } from "@/features/auth/components/AccountAvatar";
 import { SignOutButton } from "@/features/auth/components/SignOutButton";
+import { CertificateNameForm } from "@/features/certificates/components/CertificateNameForm";
 import { withReturnPath } from "@/lib/auth/return-path";
 import { getAccountSession } from "@/lib/auth/session";
 
@@ -41,6 +42,8 @@ export default async function AccountPage() {
           <SignOutButton />
         </section>
 
+        <CertificateNameForm />
+
         <section
           aria-labelledby="progress-heading"
           className="mt-6 rounded-xl border border-border-subtle bg-surface p-6"
@@ -53,8 +56,9 @@ export default async function AccountPage() {
             Learning progress
           </h2>
           <p className="mt-2 text-small text-fg-secondary">
-            Your lessons, XP and playground are saved in this browser. They are not linked to your
-            account yet, and signing in or out never changes them.
+            Your signed-in learning progress syncs to your GitDojo account across devices. Progress
+            made while signed out stays in that browser and is not merged into this account.
+            Playground files remain in your browser.
           </p>
           <Button asChild variant="secondary" className="mt-4">
             <Link href="/dashboard">

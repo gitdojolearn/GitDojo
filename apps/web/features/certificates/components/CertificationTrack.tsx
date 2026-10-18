@@ -12,13 +12,17 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   CERTIFICATION_TRACK,
   TRACK_AWARD,
   TRACK_CERTIFICATE_TITLE,
   type TrackProgress,
 } from "@/lib/certificates/track";
+import {
+  nameRequiredMessage,
+  type CertificateNameInput,
+} from "@/lib/certificates/certificate-name";
 import { useTrackState, type TrackState } from "../hooks/use-track-state";
 import { requestCertificate } from "../services/issue-certificate";
 import { loadCertificationStatus, type IssuedCertificate } from "../state/use-certification-status";
@@ -37,6 +41,62 @@ import {
 } from "./TrackParts";
 
 const RETURN_TO = encodeURIComponent("/certification");
+
+type CertificateNameStatus =
+  | { status: "loading" }
+  | { status: "error" }
+  | {
+      status: "loaded";
+      name: CertificateNameInput | null;
+      certificate:
+        | { ok: true; recipientName: string }
+        | { ok: false; reason: "missing" | "unprintable"; characters: string[] };
+    };
+
+function useCertificateName(accountId: string | null): CertificateNameStatus {
+  const [result, setResult] = useState<{
+    accountId: string;
+    value: Exclude<CertificateNameStatus, { status: "loading" }>;
+  } | null>(null);
+  useEffect(() => {
+    if (!accountId) return;
+    let active = true;
+    void fetch("/api/account/certificate-name", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("unavailable");
+        const data: unknown = await response.json();
+        if (
+          !data ||
+          typeof data !== "object" ||
+          !("certificate" in data) ||
+          !data.certificate ||
+          typeof data.certificate !== "object" ||
+          !("ok" in data.certificate) ||
+          typeof data.certificate.ok !== "boolean"
+        ) {
+          throw new Error("invalid response");
+        }
+        return data as {
+          name: CertificateNameInput | null;
+          certificate: Extract<CertificateNameStatus, { status: "loaded" }>["certificate"];
+        };
+      })
+      .then((data) => {
+        if (active)
+          setResult({
+            accountId,
+            value: { status: "loaded", name: data.name, certificate: data.certificate },
+          });
+      })
+      .catch(() => {
+        if (active) setResult({ accountId, value: { status: "error" } });
+      });
+    return () => {
+      active = false;
+    };
+  }, [accountId]);
+  return accountId && result?.accountId === accountId ? result.value : { status: "loading" };
+}
 
 /**
  * The learner's place on the certification track: their status and next action, then every
@@ -142,6 +202,7 @@ function StatusPanel({
   requirements: TrackRequirementInfo[];
   onAnnounce: (message: string) => void;
 }) {
+  const certificateName = useCertificateName(state.kind === "ready" ? state.accountId : null);
   if (state.kind === "loading") {
     return (
       <div className="mt-4 space-y-3" data-testid="track-loading">
@@ -199,6 +260,47 @@ function StatusPanel({
   return (
     <div className="mt-3">
       <PhaseLine phase={phase} progress={progress} />
+      {phase !== "completed" && phase !== "revoked" ? (
+        <div
+          className="mt-4 rounded-lg border border-border-subtle bg-surface p-4"
+          data-testid="track-certificate-name"
+        >
+          {certificateName.status === "loading" ? (
+            <p role="status" className="text-small text-fg-secondary">
+              Checking your saved certificate name…
+            </p>
+          ) : null}
+          {certificateName.status === "error" ? (
+            <p role="alert" className="text-small text-fg-secondary">
+              Your saved certificate name couldn&apos;t be checked. Try reloading before issuing.
+            </p>
+          ) : null}
+          {certificateName.status === "loaded" && certificateName.certificate.ok ? (
+            <p className="text-small text-fg-secondary">
+              Name on your certificate:{" "}
+              <strong className="font-semibold text-fg">
+                {certificateName.certificate.recipientName}
+              </strong>{" "}
+              ·{" "}
+              <Link className="text-accent underline" href="/account#certificate-name">
+                Edit
+              </Link>
+            </p>
+          ) : null}
+          {certificateName.status === "loaded" && !certificateName.certificate.ok ? (
+            <p className="text-small text-fg-secondary">
+              {nameRequiredMessage(
+                certificateName.certificate.reason,
+                certificateName.certificate.characters,
+              )}{" "}
+              <Link className="text-accent underline" href="/account#certificate-name">
+                Add or edit your certificate name
+              </Link>
+              .
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <TrackProgressBar
         progress={progress}
         label="Certification track requirements"
@@ -218,6 +320,7 @@ function StatusPanel({
           <ClaimCertificate
             accountId={state.accountId}
             reissue={state.reissue}
+            nameReady={certificateName.status === "loaded" && certificateName.certificate.ok}
             onAnnounce={onAnnounce}
           />
         ) : (
@@ -316,10 +419,12 @@ function ContinueAction({
 function ClaimCertificate({
   accountId,
   reissue,
+  nameReady,
   onAnnounce,
 }: {
   accountId: string;
   reissue: boolean;
+  nameReady: boolean;
   onAnnounce: (message: string) => void;
 }) {
   const [consent, setConsent] = useState(false);
@@ -347,16 +452,18 @@ function ClaimCertificate({
       {reissue ? (
         <p className="mb-4 text-small text-fg-secondary" data-testid="track-reissue">
           GitDojo revoked your earlier certificate so that a corrected one can be issued. The new
-          certificate shows your account profile name as it is now, so check the name in the menu at
-          the top of the page before you get it.
+          certificate shows your certificate name as it is now, so check it on your{" "}
+          <a href="/account#certificate-name">account page</a> before you get it.
         </p>
       ) : null}
-      <NameConsentChoice value={consent} onChange={setConsent} disabled={busy} />
+      {nameReady ? (
+        <NameConsentChoice value={consent} onChange={setConsent} disabled={busy} />
+      ) : null}
       <Button
         variant="primary"
         size="lg"
         className="mt-4"
-        disabled={busy}
+        disabled={busy || !nameReady}
         onClick={() => {
           void claim();
         }}

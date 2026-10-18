@@ -109,10 +109,10 @@ export default async function CertificationPage() {
 
             <AboutSection id="privacy" icon={Eye} title="Your name and privacy">
               <p>
-                The PDF always shows your account profile name. Before issuing, you choose whether
-                the public verification page and badge show it too. If you don&apos;t, they say
-                &ldquo;Name withheld by learner&rdquo;. The choice is fixed once issued. Your email
-                address and account ID never appear.
+                The PDF always shows the certificate name you enter on your account page. Before
+                issuing, you choose whether the public verification page and badge show it too. If
+                you don&apos;t, they say &ldquo;Name withheld by learner&rdquo;. The choice is fixed
+                once issued. Your email address and account ID never appear.
               </p>
             </AboutSection>
 
