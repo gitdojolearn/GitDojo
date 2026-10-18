@@ -1,1 +1,1 @@
-GitDojo logo: Learn Git by doing.
+GitDojo: Learn Git by doing. A lesson in progress, with Git commands in a browser terminal and the commit graph showing HEAD on main.

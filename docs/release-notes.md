@@ -77,7 +77,7 @@ it ends at the next heading.
 To check notes locally, save the release as JSON and run the same check:
 
 ```bash
-gh api repos/Aakashwije/GitDojo/releases/tags/v0.1.12 > /tmp/release.json
+gh api repos/gitdojolearn/GitDojo/releases/tags/v0.1.12 > /tmp/release.json
 TAG=v0.1.12 RELEASE_JSON=/tmp/release.json node apps/web/scripts/write-release-info.mjs --check
 ```
 
