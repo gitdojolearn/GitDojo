@@ -17,12 +17,13 @@ GitDojo is an open-source interactive Git learning environment where developers 
 real commands, manipulating safe browser-based repositories, and visualizing what happens
 internally.
 
-> **Status: early development.** Five courses, from Git Basics to Undo and Recover, ten real-world
-> challenges and a free playground run end to end in the browser: a real Git engine, a terminal
-> and code editor, live working tree / staging / branch graph visualization, state-based
-> objective validation, progressive hints, plain-words error explanations, a progress dashboard
-> saved locally with no account, and optional accounts through WSO2 Identity Platform. Syncing
-> progress to accounts is on the [roadmap](#roadmap).
+> **Status: early development.** Seven courses, from Git Basics to Remotes and Collaboration, ten
+> real-world challenges, Practice mode and a free playground run end to end in the browser. The
+> app includes a real Git engine, terminal and code editor, live repository visualizations,
+> state-based objective validation, progressive hints, plain-words error explanations, and a
+> progress dashboard. Progress works in the browser without an account; optional accounts through
+> WSO2 Identity Platform sync completion records across devices. Signed-in learners can earn
+> completion certificates or demonstrate Git skills in a separately server-graded capstone.
 
 ## What it does today
 
@@ -80,9 +81,17 @@ or reset your progress.
 Accounts are optional. When a site configures [WSO2 Identity Platform](docs/authentication.md),
 learners can **sign up and sign in** on its secure hosted pages (GitDojo never handles
 passwords) and get an account menu on every page. With a PostgreSQL database, signed-in
-learners' completed lessons are saved to their account and appear in any browser
+learners' completions are saved to their account and appear in any browser
 ([docs/account-progress.md](docs/account-progress.md)); anonymous progress stays in the browser
-and is never merged into an account. Deploying: [docs/deployment.md](docs/deployment.md).
+and is never merged into an account.
+
+Signed-in learners can earn three **completion certificates** by completing their named lessons
+and Practice tasks. Each certificate has a downloadable PDF, a signed Open Badge, and a public
+verification page with its issue date and current valid or revoked status. Learners choose whether
+their name appears on the public page and badge. These completion awards record learner-reported
+completions; they do not claim to assess Git proficiency. The separate [Git capstone](docs/assessment.md)
+grades submitted Git history on the server and can issue an assessed Git Practical Skills credential.
+See [certificate details](docs/certificates.md). Deploying: [docs/deployment.md](docs/deployment.md).
 
 Every workspace has a **code editor** (Monaco) with a file explorer and Git status letters, so
 editing a file really makes it "modified". When a command fails, the terminal shows Git's real
@@ -209,6 +218,9 @@ single YAML file. See:
   and console configuration
 - [docs/account-progress.md](docs/account-progress.md): PostgreSQL, migrations and the account
   progress API
+- [docs/certificates.md](docs/certificates.md): completion awards, public verification, Open Badges
+  and revocation
+- [docs/assessment.md](docs/assessment.md): the server-graded Git capstone and assessed credential
 - [docs/testing.md](docs/testing.md): tests, accessibility review and performance results
 - [docs/ci.md](docs/ci.md): CI jobs, security scans, reports and branch protection
 - [docs/release-notes.md](docs/release-notes.md): writing the learner highlights for a release
@@ -237,7 +249,9 @@ single YAML file. See:
       scans), performance fixes
 - [x] Accounts with WSO2 Identity Platform: hosted sign-in and sign-up, account menu, sign-out
 - [x] Account progress storage: PostgreSQL, migrations, protected progress API
-- [ ] Progress that syncs across devices with an account (today it is saved in the browser)
+- [x] Account-backed completion progress across devices
+- [x] Versioned completion certificates with PDF, signed Open Badge and public verification
+- [x] Server-graded Git capstone with an assessed skills credential
 - [ ] Remote repositories (`clone`, `fetch`, `pull`, `push`), then real GitHub
 
 ## License
