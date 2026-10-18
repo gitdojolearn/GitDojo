@@ -1,8 +1,15 @@
 import { connection } from "next/server";
 import { getVerifiedIdentity } from "@/lib/auth/identity";
 import { isSameOriginRequest } from "@/lib/http/same-origin";
-import { AWARDS, awardKeys, criteriaNarrative, isAwardKey } from "@/lib/certificates/awards";
-import { issueCertificate, ownCertificates } from "@/lib/certificates/store";
+import {
+  AWARDS,
+  awardKeys,
+  completedRequirements,
+  criteriaNarrative,
+  isAwardKey,
+  missingRequirements,
+} from "@/lib/certificates/awards";
+import { issueCertificate, ownCertificates, ownCompletions } from "@/lib/certificates/store";
 import {
   CredentialConfigError,
   prepareCredentialIssuer,
@@ -52,8 +59,21 @@ export async function GET() {
     return Response.json({ error: auth.status }, { status: 401, headers: PRIVATE });
   try {
     const certificates = await ownCertificates(auth.identity);
+    const { done, lastLessonId } = await ownCompletions(auth.identity);
     return Response.json(
       {
+        // From the same stored completions, by the same rule, that issuance checks.
+        progress: Object.fromEntries(
+          awardKeys.map((key) => [
+            key,
+            {
+              completed: completedRequirements(key, done),
+              missing: missingRequirements(key, done),
+            },
+          ]),
+        ),
+        lastLessonId,
+        checkedAt: new Date().toISOString(),
         awards: awardKeys.map((key) => ({ key, ...AWARDS[key], criteria: criteriaNarrative(key) })),
         certificates: certificates.map((item) => ({
           id: item.id,

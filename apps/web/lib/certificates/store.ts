@@ -4,7 +4,13 @@ import type { AssessmentGrade, CAPSTONE_KEY } from "@gitdojo/shared-types";
 import { getDatabase } from "@/lib/db/client";
 import type { VerifiedIdentity } from "@/lib/auth/identity";
 import { upsertUser } from "@/lib/account-progress/postgres-store";
-import { AWARDS, criteriaNarrative, type AwardKey } from "./awards";
+import {
+  AWARDS,
+  criteriaNarrative,
+  missingRequirements,
+  type AwardKey,
+  type CompletionSets,
+} from "./awards";
 
 export interface AssessedEvidence {
   kind: "assessed";
@@ -90,6 +96,36 @@ export async function ownCertificates(identity: VerifiedIdentity): Promise<Certi
   return rows.map(certificate);
 }
 
+/**
+ * The account's stored completions: the same rows issuance checks, so progress shown from them
+ * always agrees with what issuing would decide. Read-only; an account with no rows has none.
+ */
+export async function ownCompletions(
+  identity: VerifiedIdentity,
+): Promise<{ done: CompletionSets; lastLessonId: string | null }> {
+  // Sequential on purpose: one connection, and each query is small.
+  const sql = getDatabase();
+  const lessons = await sql<{ lesson_id: string }[]>`
+    SELECT c.lesson_id FROM lesson_completions c JOIN users u ON u.id = c.user_id
+    WHERE u.issuer = ${identity.issuer} AND u.subject = ${identity.subject}
+  `;
+  const practice = await sql<{ task_id: string }[]>`
+    SELECT c.task_id FROM practice_completions c JOIN users u ON u.id = c.user_id
+    WHERE u.issuer = ${identity.issuer} AND u.subject = ${identity.subject}
+  `;
+  const [last] = await sql<{ lesson_id: string }[]>`
+    SELECT l.lesson_id FROM last_lessons l JOIN users u ON u.id = l.user_id
+    WHERE u.issuer = ${identity.issuer} AND u.subject = ${identity.subject}
+  `;
+  return {
+    done: {
+      lessons: new Set(lessons.map((row) => row.lesson_id)),
+      practice: new Set(practice.map((row) => row.task_id)),
+    },
+    lastLessonId: last?.lesson_id ?? null,
+  };
+}
+
 export async function ownCertificate(
   identity: VerifiedIdentity,
   id: string,
@@ -127,12 +163,10 @@ export async function issueCertificate(
     const practice = await tx<{ task_id: string }[]>`
       SELECT task_id FROM practice_completions WHERE user_id = ${userId}
     `;
-    const doneLessons = new Set(lessons.map((item) => item.lesson_id));
-    const donePractice = new Set(practice.map((item) => item.task_id));
-    const missing = [
-      ...award.lessons.filter((id) => !doneLessons.has(id)).map((id) => `lesson:${id}`),
-      ...award.practice.filter((id) => !donePractice.has(id)).map((id) => `practice:${id}`),
-    ];
+    const missing = missingRequirements(key, {
+      lessons: new Set(lessons.map((item) => item.lesson_id)),
+      practice: new Set(practice.map((item) => item.task_id)),
+    });
     if (missing.length > 0) return { certificate: null, eligible: false, missing };
 
     const evidence = {

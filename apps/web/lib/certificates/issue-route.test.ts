@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { POST } from "@/app/api/certificates/route";
+import { GET, POST } from "@/app/api/certificates/route";
+import { missingRequirements } from "./awards";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/server", () => ({ connection: () => Promise.resolve() }));
@@ -12,10 +13,11 @@ vi.mock("@/lib/auth/identity", () => ({
     }),
 }));
 vi.mock("@/lib/http/same-origin", () => ({ isSameOriginRequest: () => true }));
-const store = vi.hoisted(() => ({ issue: vi.fn() }));
+const store = vi.hoisted(() => ({ issue: vi.fn(), completions: vi.fn() }));
 vi.mock("./store", () => ({
   issueCertificate: store.issue,
-  ownCertificates: vi.fn(),
+  ownCertificates: () => Promise.resolve([]),
+  ownCompletions: store.completions,
   revokedIndexes: vi.fn(),
 }));
 const db = vi.hoisted(() => ({ sql: vi.fn() }));
@@ -73,5 +75,31 @@ describe("POST /api/certificates when issuance is not configured", () => {
     vi.stubEnv("GITDOJO_CREDENTIAL_KEY_ID", "");
     await issue();
     expect(String(log.mock.calls[0]?.[0])).toContain("GITDOJO_CREDENTIAL_KEY_ID is missing");
+  });
+});
+
+describe("GET /api/certificates", () => {
+  it("reports each award's progress from the account's stored completions, by the issuing rule", async () => {
+    const done = {
+      lessons: new Set(["what-is-git", "git-init", "what-is-a-branch"]),
+      practice: new Set(["commit-one-change"]),
+    };
+    store.completions.mockResolvedValue({ done, lastLessonId: "git-status" });
+    const body = (await (await GET()).json()) as {
+      progress: Record<string, { completed: string[]; missing: string[] }>;
+      lastLessonId: string | null;
+    };
+    expect(body.lastLessonId).toBe("git-status");
+    expect(body.progress["git-foundations"]?.completed).toEqual([
+      "lesson:what-is-git",
+      "lesson:git-init",
+      "practice:commit-one-change",
+    ]);
+    expect(body.progress["git-foundations"]?.missing).toEqual(
+      missingRequirements("git-foundations", done),
+    );
+    expect(body.progress["branching-collaboration"]?.completed).toEqual([
+      "lesson:what-is-a-branch",
+    ]);
   });
 });

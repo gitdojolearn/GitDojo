@@ -159,3 +159,14 @@ test("the sign-in button cannot be pressed twice", async ({ page }) => {
   await button.dblclick();
   await expect(page).toHaveURL(PROVIDER);
 });
+
+test("a signed-out visitor sees how to start the certification track", async ({ page }) => {
+  await page.goto("/certification");
+  const signedOut = page.getByTestId("track-signed-out");
+  await expect(signedOut).toContainText("lessons done while signed out don't count");
+  await expect(signedOut.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/sign-in?returnTo=%2Fcertification",
+  );
+  await expect(page.getByTestId("requirement-status")).toHaveCount(0);
+});

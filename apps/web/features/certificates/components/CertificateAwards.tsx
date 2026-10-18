@@ -2,36 +2,35 @@
 
 import { type LocalProgress, type ProgressCatalog } from "@gitdojo/progress";
 import { Badge, Button, cn } from "@gitdojo/ui";
-import {
-  ArrowRight,
-  Award,
-  Check,
-  CircleCheck,
-  Copy,
-  Download,
-  ExternalLink,
-  LoaderCircle,
-  ShieldX,
-} from "lucide-react";
+import { ArrowRight, Award, CircleCheck, LoaderCircle, ShieldX } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useId, useState } from "react";
+import { useState } from "react";
 import { AWARDS, awardKeys, type AwardKey } from "@/lib/certificates/awards";
-import { syncCompletionsNow, syncNow, useProgressStore } from "@/features/progress";
-import { awardProgress, type AwardProgress } from "../services/award-progress";
+import { CERTIFICATION_TRACK } from "@/lib/certificates/track";
+import { useProgressStore } from "@/features/progress";
+import {
+  awardProgress,
+  awardProgressFrom,
+  completionSetsFromIds,
+  type AwardProgress,
+} from "../services/award-progress";
+import { requestCertificate } from "../services/issue-certificate";
+import {
+  loadCertificationStatus,
+  useAccountCertification,
+  type IssuedCertificate,
+} from "../state/use-certification-status";
+import {
+  CertificateLinks,
+  CopyVerificationLink,
+  ISSUED_DATE,
+  NameConsentChoice,
+} from "./CertificateParts";
 
-interface Issued {
-  id: string;
-  awardKey: AwardKey;
-  criteriaVersion: number;
-  recipientName: string;
-  issuedAt: string;
-  revoked: boolean;
-  publicNameConsent: boolean;
-  /** The exact public verification URL; `null` when the server has no site origin configured. */
-  verificationUrl?: string | null;
-}
+const plural = (count: number, noun: string) => `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 
-const ISSUED_DATE = new Intl.DateTimeFormat("en", { dateStyle: "long", timeZone: "UTC" });
+/** The awards besides the certification track's, which has its own card and page. */
+const OTHER_AWARDS = awardKeys.filter((key) => key !== CERTIFICATION_TRACK.awardKey);
 
 export function CertificateAwards({
   progress,
@@ -42,87 +41,44 @@ export function CertificateAwards({
 }) {
   const mode = useProgressStore((state) => state.mode);
   const accountId = progress.owner.kind === "account" ? progress.owner.accountId : null;
-  const [issuedState, setIssuedState] = useState<{ accountId: string; items: Issued[] } | null>(
-    null,
-  );
-  const issued = issuedState?.accountId === accountId ? issuedState.items : null;
-  const [loadFailed, setLoadFailed] = useState(false);
+  const account = mode === "account" && accountId !== null;
+  const certification = useAccountCertification(account ? accountId : null);
+  const issued = certification.data?.certificates ?? null;
+  const loadFailed = certification.status === "error";
   const [busy, setBusy] = useState<AwardKey | null>(null);
   const [consent, setConsent] = useState(false);
   const [message, setMessage] = useState("");
   // The award issued in this visit, for its brief unlock moment.
   const [unlocked, setUnlocked] = useState<AwardKey | null>(null);
-  const consentName = useId();
-  const account = mode === "account" && accountId !== null;
-
-  useEffect(() => {
-    if (mode !== "account" || !accountId) return;
-    let active = true;
-    void fetch("/api/certificates", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Could not load certificates.");
-        return response.json() as Promise<{ certificates: Issued[] }>;
-      })
-      .then(({ certificates }) => {
-        if (active) setIssuedState({ accountId, items: certificates });
-      })
-      .catch(() => {
-        if (!active) return;
-        setLoadFailed(true);
-        setMessage("Certificates are temporarily unavailable.");
-      });
-    return () => {
-      active = false;
-    };
-  }, [mode, accountId]);
 
   async function issue(key: AwardKey) {
-    if (busy) return;
+    if (busy || !accountId) return;
     setBusy(key);
     setMessage("");
-    try {
-      await syncCompletionsNow();
-      await syncNow();
-      const response = await fetch("/api/certificates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ awardKey: key, publicNameConsent: consent }),
-      });
-      const result = (await response.json()) as {
-        id?: string;
-        error?: string;
-        missing?: string[];
-        message?: string;
-      };
-      if (!response.ok || !result.id) {
-        setMessage(
-          result.error === "not_eligible"
-            ? "Some completions have not reached your account yet. Sync your progress and try again."
-            : (result.message ?? "Could not issue this certificate right now."),
-        );
-        return;
-      }
-      const refreshed = await fetch("/api/certificates", { cache: "no-store" });
-      if (refreshed.ok) {
-        const data = (await refreshed.json()) as { certificates: Issued[] };
-        if (accountId) setIssuedState({ accountId, items: data.certificates });
-      }
+    const result = await requestCertificate(key, consent);
+    if (result.ok) {
+      await loadCertificationStatus(accountId);
       setUnlocked(key);
       setMessage(`${AWARDS[key].title} certificate issued.`);
-    } catch {
-      setMessage("Could not issue this certificate right now.");
-    } finally {
-      setBusy(null);
+    } else {
+      setMessage(result.message);
     }
+    setBusy(null);
   }
 
-  const awards = awardKeys.map((key) => {
+  const awards = OTHER_AWARDS.map((key) => {
     const award = AWARDS[key];
     const item = issued?.find(
       (candidate) =>
         candidate.awardKey === key && candidate.criteriaVersion === award.criteriaVersion,
     );
-    return { key, award, item, status: awardProgress(key, progress, catalog) };
+    // Signed in: the account's stored completions, as issuance counts them. Otherwise a guide
+    // from this browser.
+    const server = account ? certification.data?.progress[key] : undefined;
+    const status = server
+      ? awardProgressFrom(key, completionSetsFromIds(server.completed), catalog)
+      : awardProgress(key, progress, catalog);
+    return { key, award, item, status };
   });
   const issuable = awards.some(({ item, status }) => !item && status.remaining === 0);
 
@@ -135,7 +91,7 @@ export function CertificateAwards({
       <div className="flex items-center gap-2">
         <Award className="size-5 text-accent" aria-hidden="true" />
         <h2 id="certificates-heading" className="text-h3 font-semibold text-fg">
-          Completion certificates
+          More completion certificates
         </h2>
       </div>
       <p className="mt-2 max-w-3xl text-small text-fg-secondary">
@@ -153,46 +109,19 @@ export function CertificateAwards({
           Your account can&apos;t be reached right now, so certificates can&apos;t be shown or
           issued. The progress below is from this visit.
         </p>
+      ) : loadFailed ? (
+        <p className="mt-3 text-small text-fg-secondary" data-testid="certificates-load-failed">
+          Certificates are temporarily unavailable. The progress below is from this browser.
+        </p>
       ) : null}
 
       {account && issuable ? (
-        <fieldset className="mt-5 rounded-lg border border-border bg-panel p-4">
-          <legend className="px-1 text-small font-semibold text-fg">
-            Your name on the certificate you issue
-          </legend>
-          <p className="text-caption text-fg-muted">
-            Your PDF always shows your account profile name. Its QR code and link open a public
-            verification page: this choice decides whether that page and the Open Badge show your
-            name too.
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <ConsentOption
-              name={consentName}
-              checked={!consent}
-              onSelect={() => {
-                setConsent(false);
-              }}
-              title="Keep my name private"
-              detail="The verification page says “Name withheld by learner” and the badge has no name."
-            />
-            <ConsentOption
-              name={consentName}
-              checked={consent}
-              onSelect={() => {
-                setConsent(true);
-              }}
-              title="Show my name publicly"
-              detail="Your profile name appears on the public verification page and in the Open Badge."
-            />
-          </div>
-          <p className="mt-3 text-caption text-fg-muted">
-            The choice is fixed for each certificate once it is issued, and copies you have shared
-            can&apos;t be recalled.
-          </p>
-        </fieldset>
+        <div className="mt-5">
+          <NameConsentChoice value={consent} onChange={setConsent} disabled={busy !== null} />
+        </div>
       ) : null}
 
-      <ul className="mt-5 grid gap-4 lg:grid-cols-3">
+      <ul className="mt-5 grid gap-4 lg:grid-cols-2">
         {awards.map(({ key, award, item, status }) => (
           <li
             key={key}
@@ -218,8 +147,8 @@ export function CertificateAwards({
             </div>
             <Requirements status={status} title={award.title} />
             <p className="mt-1 text-caption text-fg-muted">
-              {award.lessons.length} lessons · {award.practice.length} Practice{" "}
-              {award.practice.length === 1 ? "task" : "tasks"} · criteria v{award.criteriaVersion}
+              {award.lessons.length} lessons · {plural(award.practice.length, "Practice task")} ·
+              criteria v{award.criteriaVersion}
             </p>
 
             <div className="mt-auto pt-4">
@@ -281,35 +210,6 @@ export function CertificateAwards({
   );
 }
 
-function ConsentOption({
-  name,
-  checked,
-  onSelect,
-  title,
-  detail,
-}: {
-  name: string;
-  checked: boolean;
-  onSelect: () => void;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex cursor-pointer gap-2.5 rounded-md border p-3 transition-colors duration-150 ease-out",
-        checked ? "border-accent bg-accent-soft" : "border-border hover:border-border-strong",
-      )}
-    >
-      <input type="radio" name={name} checked={checked} onChange={onSelect} className="mt-1" />
-      <span>
-        <span className="block text-small font-medium text-fg">{title}</span>
-        <span className="block text-caption text-fg-muted">{detail}</span>
-      </span>
-    </label>
-  );
-}
-
 function Requirements({ status, title }: { status: AwardProgress; title: string }) {
   return (
     <div className="mt-3">
@@ -348,7 +248,7 @@ function AwardBadge({
   status,
   unlocked,
 }: {
-  item?: Issued;
+  item?: IssuedCertificate;
   status: AwardProgress;
   unlocked: boolean;
 }) {
@@ -374,7 +274,7 @@ function Earned({
   unlocked,
   onAnnounce,
 }: {
-  item: Issued;
+  item: IssuedCertificate;
   unlocked: boolean;
   onAnnounce: (message: string) => void;
 }) {
@@ -396,97 +296,13 @@ function Earned({
           {ISSUED_DATE.format(new Date(item.issuedAt))}
         </time>
       </p>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-small">
-        <a
-          className="inline-flex items-center gap-1 text-accent underline"
-          href={`/api/certificates/${item.id}/pdf`}
-        >
-          <Download className="size-3.5" aria-hidden="true" />
-          PDF
-        </a>
-        <a
-          className="inline-flex items-center gap-1 text-accent underline"
-          href={`/api/credentials/${item.id}`}
-        >
-          <Download className="size-3.5" aria-hidden="true" />
-          Open Badge
-        </a>
-        <a
-          className="inline-flex items-center gap-1 text-accent underline"
-          href={`/verify/${item.id}`}
-        >
-          <ExternalLink className="size-3.5" aria-hidden="true" />
-          Verify
-        </a>
+      <div className="mt-3">
+        <CertificateLinks item={item} />
       </div>
       <CopyVerificationLink item={item} onAnnounce={onAnnounce} />
       <p className="mt-2 text-caption text-fg-muted">
         Name on the public page: {item.publicNameConsent ? "shown" : "withheld"}
       </p>
-    </div>
-  );
-}
-
-/**
- * Copies the exact link the PDF's QR code opens. Success is shown on the button and announced
- * through the section's one status region; if the clipboard is blocked, the link is shown instead.
- */
-function CopyVerificationLink({
-  item,
-  onAnnounce,
-}: {
-  item: Issued;
-  onAnnounce: (message: string) => void;
-}) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  const url = () => item.verificationUrl ?? `${window.location.origin}/verify/${item.id}`;
-  useEffect(() => {
-    if (state !== "copied") return;
-    const timer = window.setTimeout(() => {
-      setState("idle");
-    }, 2500);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [state]);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url());
-      setState("copied");
-      onAnnounce("Verification link copied.");
-    } catch {
-      setState("failed");
-      onAnnounce("Couldn't copy the link. It is shown below the button so you can copy it.");
-    }
-  };
-
-  return (
-    <div className="mt-3">
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => {
-          void copy();
-        }}
-        data-testid="copy-verification-link"
-      >
-        {state === "copied" ? (
-          <>
-            <Check aria-hidden="true" /> Link copied
-          </>
-        ) : (
-          <>
-            <Copy aria-hidden="true" /> Copy verification link
-          </>
-        )}
-      </Button>
-      {state === "failed" ? (
-        <p className="mt-2 text-caption break-all text-fg-secondary">
-          <span className="text-fg-muted">Verification link: </span>
-          <span className="font-mono select-all">{url()}</span>
-        </p>
-      ) : null}
     </div>
   );
 }

@@ -37,7 +37,7 @@ import { lessonHref } from "@/features/course";
 import { challengeHref } from "@/features/challenges";
 import { formatRelativeTime, formatTimestamp } from "@/lib/time";
 import { ProgressManagement, useProgressStore } from "@/features/progress";
-import { CertificateAwards } from "@/features/certificates";
+import { CertificateAwards, CertificationTrackCard } from "@/features/certificates";
 import { ActivityCalendar } from "./ActivityCalendar";
 import { CommandUsage } from "./CommandUsage";
 import { LearningJourney } from "./LearningJourney";
@@ -173,6 +173,8 @@ function DashboardContent({
       </section>
 
       <NextSteps steps={nextSteps} />
+
+      <CertificationTrackCard catalog={catalog} />
 
       <div className="grid gap-10 md:grid-cols-2 xl:grid-cols-3">
         <ActivityCalendar

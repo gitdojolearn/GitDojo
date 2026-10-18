@@ -38,6 +38,40 @@ The learner decides at issuance whether that name appears on the public verifica
 badges. This choice is fixed for the issued credential, because signed and downloaded badges
 cannot be recalled or silently changed.
 
+## Certification track
+
+`/certification` is the learner's guided path to the **Git Foundations completion certificate**
+(criteria version 1), linked from the main navigation and from a card on the dashboard. It lists
+every requirement in order before the learner starts: the ten Git Basics lessons, then the
+`commit-one-change` Practice task. Each one has its stable requirement ID (`lesson:<id>` or
+`practice:<id>`), title, the lesson's goal or the task's mission, and a link to the content.
+
+- **One source of truth.** The track is the `git-foundations` award in `lib/certificates/awards.ts`
+  (`lib/certificates/track.ts` adds the learner-facing description), so the page can never ask for
+  something issuance doesn't. `awardRequirements` gives the order; `missingRequirements` is the
+  single eligibility rule, used by issuance and reported by `GET /api/certificates` for each award
+  (`completed` and `missing`, from the account's stored completion rows).
+- **Progress.** Signed in, the page and the dashboard card read that report (after uploading any
+  pending completions), so they always match what issuing would decide. A requirement is
+  **Complete** when the account has its completion, **In progress** only for the lesson the
+  account opened most recently and hasn't finished (the stored last lesson), and **Not started**
+  otherwise. The next requirement is the first incomplete one in track order. Signed out, no
+  progress is shown: work done without an account never counts.
+- **States.** Loading, accounts not configured, signed out (with sign-in and sign-up links that
+  return to the track), progress unavailable (with retry; never eligible), not started (**Start
+  certification track**), in progress (**Continue track**, opening the next requirement), eligible
+  (the name choice, then **Get certificate**), and completed or revoked (the certificate's title,
+  recipient, issue date, credential ID, verification link, PDF, Open Badge and copy link).
+- **Issuing** goes through `POST /api/certificates` as before: the server checks the stored
+  completions, and a repeat returns the same certificate. The button is disabled while a request
+  is in flight.
+- **Changing the criteria.** Add a new `criteriaVersion` rather than editing a version's lists.
+  Certificates already issued keep the version and the requirement snapshot they were issued
+  with, and their verification page keeps showing it.
+
+The other two completion awards and the server-graded capstone are unchanged; the dashboard lists
+the other awards below the track card.
+
 ## Verification
 
 Every PDF prints its credential ID and "Check current status at" the exact verification URL, so

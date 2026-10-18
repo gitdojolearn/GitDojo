@@ -33,6 +33,7 @@ const PAGES = [
   { name: "sign in", path: "/sign-in" },
   { name: "what's new", path: "/whats-new" },
   { name: "credential not found", path: "/verify/not-a-credential" },
+  { name: "certification track", path: "/certification" },
 ];
 
 for (const theme of THEMES) {
