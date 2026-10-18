@@ -176,21 +176,22 @@ Nothing needs configuring to learn: lessons, challenges, Practice, the playgroun
 dashboard work with no environment variables. Accounts, account progress and certificates are
 opt-in. Copy `apps/web/.env.example` to `apps/web/.env.local` (git-ignored) and set what you need:
 
-| Variable                              | Purpose                                                            | Needed for                     | Secret |
-| ------------------------------------- | ------------------------------------------------------------------ | ------------------------------ | ------ |
-| `NEXT_PUBLIC_ASGARDEO_BASE_URL`       | WSO2 Identity Platform organization URL                            | Accounts                       | No     |
-| `NEXT_PUBLIC_ASGARDEO_CLIENT_ID`      | WSO2 application client ID                                         | Accounts                       | No     |
-| `ASGARDEO_CLIENT_SECRET`              | WSO2 application client secret                                     | Accounts                       | Yes    |
-| `ASGARDEO_SECRET`                     | Signs the session cookie (32+ characters)                          | Accounts                       | Yes    |
-| `DATABASE_URL`                        | PostgreSQL 13+ connection (pooled in production)                   | Account progress, certificates | Yes    |
-| `DATABASE_URL_UNPOOLED`               | Direct connection, used only by migrations                         | Migrations (optional)          | Yes    |
-| `NEXT_PUBLIC_SITE_URL`                | Permanent HTTPS origin, printed on certificates and their QR codes | Certificates                   | No     |
-| `GITDOJO_CREDENTIAL_KEY_ID`           | Stable ID of the badge signing key, e.g. `rsa-2026-01`             | Certificates                   | No     |
-| `GITDOJO_CREDENTIAL_PRIVATE_KEY`      | RSA private key (PEM) that signs Open Badges                       | Certificates                   | Yes    |
-| `GITDOJO_SELF_REGISTRATION`           | `disabled` when self sign-up is off                                | Optional                       | No     |
-| `ASGARDEO_SESSION_COOKIE_EXPIRY_TIME` | Session lifetime in seconds (default 86400)                        | Optional                       | No     |
-| `DATABASE_POOL_MAX`                   | Connections per server instance (1–20, default 5)                  | Optional                       | No     |
-| `GITDOJO_RATE_LIMIT_*`                | Request limits; see [docs/rate-limits.md](docs/rate-limits.md)     | Optional                       | No     |
+| Variable                                  | Purpose                                                            | Needed for                     | Secret |
+| ----------------------------------------- | ------------------------------------------------------------------ | ------------------------------ | ------ |
+| `NEXT_PUBLIC_ASGARDEO_BASE_URL`           | WSO2 Identity Platform organization URL                            | Accounts                       | No     |
+| `NEXT_PUBLIC_ASGARDEO_CLIENT_ID`          | WSO2 application client ID                                         | Accounts                       | No     |
+| `ASGARDEO_CLIENT_SECRET`                  | WSO2 application client secret                                     | Accounts                       | Yes    |
+| `ASGARDEO_SECRET`                         | Signs the session cookie (32+ characters)                          | Accounts                       | Yes    |
+| `DATABASE_URL`                            | PostgreSQL 13+ connection (pooled in production)                   | Account progress, certificates | Yes    |
+| `DATABASE_URL_UNPOOLED`                   | Direct connection, used only by migrations                         | Migrations (optional)          | Yes    |
+| `NEXT_PUBLIC_SITE_URL`                    | Permanent HTTPS origin, printed on certificates and their QR codes | Certificates                   | No     |
+| `GITDOJO_CREDENTIAL_KEY_ID`               | Stable ID of the badge signing key, e.g. `rsa-2026-01`             | Certificates                   | No     |
+| `GITDOJO_CREDENTIAL_PRIVATE_KEY`          | RSA private key (PEM) that signs Open Badges                       | Certificates                   | Yes    |
+| `NEXT_PUBLIC_LINKEDIN_ADD_TO_PROFILE_URL` | GitDojo's LinkedIn Add to Profile link for sharing certificates    | Optional                       | No     |
+| `GITDOJO_SELF_REGISTRATION`               | `disabled` when self sign-up is off                                | Optional                       | No     |
+| `ASGARDEO_SESSION_COOKIE_EXPIRY_TIME`     | Session lifetime in seconds (default 86400)                        | Optional                       | No     |
+| `DATABASE_POOL_MAX`                       | Connections per server instance (1–20, default 5)                  | Optional                       | No     |
+| `GITDOJO_RATE_LIMIT_*`                    | Request limits; see [docs/rate-limits.md](docs/rate-limits.md)     | Optional                       | No     |
 
 Never put a secret in a `NEXT_PUBLIC_` variable: those are bundled into browser code. Setup
 guides: [authentication](docs/authentication.md) (accounts, with a local mock identity provider
@@ -229,7 +230,12 @@ checks.
   agreed when the certificate was issued; otherwise it says "Name withheld by learner".
 - **Revocation:** an operator command, run with database credentials and never exposed on the web:
   `node apps/web/scripts/revoke-certificate.mjs <id> --by "<operator>" --reason "<why>"`. The
-  operator and reason are kept for audit and never published.
+  operator and reason are kept for audit and never published. Add `--allow-reissue` when the
+  learner should be able to get a corrected certificate, such as after a misspelt name.
+- **Sharing:** an earned certificate has a **Share certificate** section: **Add to LinkedIn**
+  (with each field LinkedIn asks for, ready to copy, since LinkedIn no longer pre-fills them),
+  **Copy verification link**, **Download badge image** (a PNG for posts) and **Download signed
+  Open Badge**.
 - **Open Badges 3.0:** each credential is also an RS256-signed OpenBadgeCredential with a
   Bitstring Status List entry for revocation. It has not been through 1EdTech conformance
   certification. The verification link and QR code are a lookup on GitDojo's site, not a

@@ -7,6 +7,7 @@ import {
   type TrackProgress,
 } from "@/lib/certificates/track";
 import {
+  currentCertificate,
   loadCertificationStatus,
   useAccountCertification,
   type IssuedCertificate,
@@ -25,6 +26,8 @@ export type TrackState =
       phase: "not-started" | "in-progress" | "eligible" | "completed" | "revoked";
       progress: TrackProgress;
       certificate: IssuedCertificate | null;
+      /** An earlier certificate was revoked so that a replacement can be issued. */
+      reissue: boolean;
       accountId: string;
       /** When the server's records were read. */
       checkedAt: string | null;
@@ -68,12 +71,16 @@ export function useTrackState(): TrackState {
 
   const server = data.progress[CERTIFICATION_TRACK.awardKey];
   const progress = trackProgress(server?.completed ?? [], data.lastLessonId);
-  const certificate =
-    data.certificates.find(
-      (item) =>
-        item.awardKey === CERTIFICATION_TRACK.awardKey &&
-        item.criteriaVersion === TRACK_AWARD.criteriaVersion,
-    ) ?? null;
+  const certificate = currentCertificate(
+    data.certificates,
+    CERTIFICATION_TRACK.awardKey,
+    TRACK_AWARD.criteriaVersion,
+  );
+  const reissue =
+    certificate === null &&
+    data.certificates.some(
+      (item) => item.awardKey === CERTIFICATION_TRACK.awardKey && item.reissueAllowed === true,
+    );
   const phase = certificate
     ? certificate.revoked
       ? "revoked"
@@ -88,6 +95,7 @@ export function useTrackState(): TrackState {
     phase,
     progress,
     certificate,
+    reissue,
     accountId,
     checkedAt: data.checkedAt,
     stale: status === "error",

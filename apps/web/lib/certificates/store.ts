@@ -42,6 +42,8 @@ export interface Certificate {
   publicNameConsent: boolean;
   issuedAt: Date;
   revokedAt: Date | null;
+  /** Revoked so that the learner can be issued a replacement. */
+  reissueAllowed: boolean;
   evidence: CompletionEvidence | AssessedEvidence;
 }
 
@@ -56,6 +58,7 @@ interface Row {
   public_name_consent: boolean;
   issued_at: Date;
   revoked_at: Date | null;
+  reissue_allowed: boolean;
   evidence: Certificate["evidence"];
 }
 
@@ -75,6 +78,7 @@ function certificate(row: Row): Certificate {
     publicNameConsent: row.public_name_consent,
     issuedAt: row.issued_at,
     revokedAt: row.revoked_at,
+    reissueAllowed: row.reissue_allowed,
     evidence,
   };
 }
@@ -150,10 +154,11 @@ export async function issueCertificate(
   const award = AWARDS[key];
   return sql.begin(async (tx) => {
     const userId = await upsertUser(tx, identity);
+    // A certificate revoked so that it can be reissued no longer counts: the learner gets a new one.
     const [prior] = await tx<Row[]>`
       SELECT * FROM certificates
       WHERE user_id = ${userId} AND award_key = ${key}
-        AND criteria_version = ${award.criteriaVersion}
+        AND criteria_version = ${award.criteriaVersion} AND NOT reissue_allowed
     `;
     if (prior) return { certificate: certificate(prior), eligible: true, missing: [] };
 
@@ -186,7 +191,7 @@ export async function issueCertificate(
         ${userId}, ${key}, ${award.criteriaVersion}, ${recipientName},
         ${publicNameConsent}, ${tx.json(evidence)}
       )
-      ON CONFLICT (user_id, award_key, criteria_version) DO NOTHING
+      ON CONFLICT (user_id, award_key, criteria_version) WHERE NOT reissue_allowed DO NOTHING
       RETURNING *
     `;
     const [row] = inserted
@@ -194,7 +199,7 @@ export async function issueCertificate(
       : await tx<Row[]>`
       SELECT * FROM certificates
       WHERE user_id = ${userId} AND award_key = ${key}
-        AND criteria_version = ${award.criteriaVersion}
+        AND criteria_version = ${award.criteriaVersion} AND NOT reissue_allowed
     `;
     return { certificate: certificate(row), eligible: true, missing: [] };
   });

@@ -1,7 +1,7 @@
 // Operational CLI for revoking an incorrectly issued certificate. Never expose this as a public API:
 // only someone with the database's migration credentials can run it.
 // Run from apps/web:
-//   node scripts/revoke-certificate.mjs <credential-uuid> --by "<operator>" [--reason "<why>"]
+//   node scripts/revoke-certificate.mjs <credential-uuid> --by "<operator>" [--reason "<why>"] [--allow-reissue]
 // The operator and reason are kept for GitDojo's audit and are never shown publicly.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -31,10 +31,15 @@ if (args.error) {
     if (result.status === "not-found") {
       console.error(`Certificate ${args.id} not found`);
       process.exitCode = 1;
-    } else if (result.status === "already-revoked") {
-      console.log(`${args.id} was already revoked at ${result.revokedAt.toISOString()}; unchanged`);
     } else {
-      console.log(`Revoked ${args.id} at ${result.revokedAt.toISOString()} by ${args.by}`);
+      const reissue = result.reissueAllowed
+        ? "; the learner can now be issued a replacement"
+        : "; a replacement stays blocked";
+      console.log(
+        result.status === "already-revoked"
+          ? `${args.id} was already revoked at ${result.revokedAt.toISOString()}${reissue}`
+          : `Revoked ${args.id} at ${result.revokedAt.toISOString()} by ${args.by}${reissue}`,
+      );
     }
   } finally {
     await sql.end({ timeout: 5 });

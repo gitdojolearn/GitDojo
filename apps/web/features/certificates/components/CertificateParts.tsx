@@ -88,7 +88,7 @@ function ConsentOption({
   );
 }
 
-/** PDF, Open Badge and public verification page for an issued certificate. */
+/** The certificate PDF and its public verification page. Sharing lives in ShareCertificate. */
 export function CertificateLinks({ item }: { item: IssuedCertificate }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-small">
@@ -98,13 +98,6 @@ export function CertificateLinks({ item }: { item: IssuedCertificate }) {
       >
         <Download className="size-3.5" aria-hidden="true" />
         PDF
-      </a>
-      <a
-        className="inline-flex items-center gap-1 text-accent underline"
-        href={`/api/credentials/${item.id}`}
-      >
-        <Download className="size-3.5" aria-hidden="true" />
-        Open Badge
       </a>
       <a
         className="inline-flex items-center gap-1 text-accent underline"

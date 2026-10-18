@@ -106,7 +106,7 @@ export async function submitAttempt(
         ${current.user_id}, ${CAPSTONE_KEY}, ${CAPSTONE_RUBRIC_VERSION}, ${recipientName},
         ${publicNameConsent}, ${tx.json(assessedEvidence as unknown as JsonValue)}, 'assessed', ${id}
       )
-      ON CONFLICT (user_id, award_key, criteria_version) DO NOTHING
+      ON CONFLICT (user_id, award_key, criteria_version) WHERE NOT reissue_allowed DO NOTHING
       RETURNING id
     `;
     const inserted = insertedRows.at(0);
@@ -115,7 +115,7 @@ export async function submitAttempt(
       : await tx<Pick<Certificate, "id">[]>`
           SELECT id FROM certificates
           WHERE user_id = ${current.user_id} AND award_key = ${CAPSTONE_KEY}
-            AND criteria_version = ${CAPSTONE_RUBRIC_VERSION}
+            AND criteria_version = ${CAPSTONE_RUBRIC_VERSION} AND NOT reissue_allowed
         `;
     const credential = inserted ?? existingRows.at(0);
     if (!credential) throw new Error("credential insert returned no row");

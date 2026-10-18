@@ -9,11 +9,22 @@ describe("parseRevokeArgs", () => {
       id: ID.toLowerCase(),
       by: "ops-ada",
       reason: "Issued in error",
+      allowReissue: false,
     });
     expect(parseRevokeArgs([ID, "--by", "ops-ada"])).toEqual({
       id: ID.toLowerCase(),
       by: "ops-ada",
       reason: null,
+      allowReissue: false,
+    });
+  });
+
+  it("allows a replacement only when asked to", () => {
+    expect(
+      parseRevokeArgs([ID, "--allow-reissue", "--by", "ops-ada", "--reason", "Misspelt name"]),
+    ).toEqual({ id: ID.toLowerCase(), by: "ops-ada", reason: "Misspelt name", allowReissue: true });
+    expect(parseRevokeArgs([ID, "--by", "ops-ada", "--allow-reissue"])).toMatchObject({
+      allowReissue: true,
     });
   });
 

@@ -82,6 +82,7 @@ export async function GET() {
           recipientName: item.recipientName,
           issuedAt: item.issuedAt,
           revoked: item.revokedAt !== null,
+          reissueAllowed: item.reissueAllowed,
           publicNameConsent: item.publicNameConsent,
           verificationUrl: shareableUrl(item.id),
         })),

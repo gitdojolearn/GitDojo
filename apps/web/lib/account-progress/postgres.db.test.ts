@@ -266,6 +266,70 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
       expect(found?.publicNameConsent).toBe(false);
     });
 
+    it("can be replaced only after a revocation that allows it", async () => {
+      const learner = identity("reissue-learner");
+      const userId = await upsertUser(sql, learner);
+      const award = AWARDS["git-foundations"];
+      for (const lessonId of award.lessons) {
+        await insertCompletion(sql, userId, {
+          lessonId,
+          lessonType: "interactive",
+          courseId: "git-basics",
+          xp: 50,
+        });
+      }
+      for (const taskId of award.practice) {
+        await insertCompletion(sql, userId, {
+          kind: "practice",
+          lessonId: taskId,
+          lessonType: "challenge",
+          courseId: null,
+          xp: 0,
+        });
+      }
+      const first = await issueCertificate(learner, "git-foundations", "Ada lovelace", true);
+      const firstId = first.certificate?.id ?? "";
+
+      // A plain revocation keeps blocking a new certificate.
+      await revokeCertificate(sql, {
+        id: firstId,
+        by: "ops-ada",
+        reason: "Check",
+        allowReissue: false,
+      });
+      const blocked = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
+      expect(blocked.certificate?.id).toBe(firstId);
+
+      // Allowing reissue afterwards frees the award, and keeps the original revocation record.
+      const allowed = await revokeCertificate(sql, {
+        id: firstId,
+        by: "ops-grace",
+        reason: "Misspelt name",
+        allowReissue: true,
+      });
+      expect(allowed).toMatchObject({ status: "already-revoked", reissueAllowed: true });
+      const replaced = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
+      const again = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
+      expect(replaced.certificate?.id).not.toBe(firstId);
+      expect(again.certificate?.id).toBe(replaced.certificate?.id);
+      expect(replaced.certificate?.recipientName).toBe("Ada Lovelace");
+
+      const rows = await sql<{ revoked: boolean; by: string | null; reason: string | null }[]>`
+        SELECT revoked_at IS NOT NULL AS revoked, revoked_by AS by, revocation_reason AS reason
+        FROM certificates WHERE user_id = ${userId} ORDER BY issued_at, status_index
+      `;
+      expect(rows).toEqual([
+        { revoked: true, by: "ops-ada", reason: "Check" },
+        { revoked: false, by: null, reason: null },
+      ]);
+      // Still only one certificate that counts.
+      const duplicate = await sql`
+        INSERT INTO certificates (user_id, award_key, criteria_version, recipient_name, evidence)
+        VALUES (${userId}, 'git-foundations', 1, 'Duplicate', '{}'::jsonb)
+      `.catch((error: unknown) => error as { code?: string });
+      expect(duplicate).toMatchObject({ code: "23505" });
+    });
+
     it("are repaired by migration 0009 when they were stored as JSON strings", async () => {
       const userId = await upsertUser(sql, identity("double-encoded"));
       // What the old code wrote: a pre-encoded string through a jsonb parameter.
@@ -315,7 +379,11 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
       const first = await revokeCertificate(sql, { id, by: "ops-ada", reason: "Issued in error" });
       expect(first.status).toBe("revoked");
       const again = await revokeCertificate(sql, { id, by: "ops-grace", reason: "Other" });
-      expect(again).toEqual({ status: "already-revoked", revokedAt: first.revokedAt });
+      expect(again).toEqual({
+        status: "already-revoked",
+        revokedAt: first.revokedAt,
+        reissueAllowed: false,
+      });
       const [row] = await sql`
         SELECT revoked_by, revocation_reason FROM certificates WHERE id = ${id}
       `;
