@@ -83,15 +83,24 @@ export function loadCertificationStatus(accountId: string): Promise<void> {
   return promise;
 }
 
-/** The status for `accountId` (`null` when not signed in), loading it on first use. */
+/**
+ * The status for `accountId` (`null` when not signed in). It is re-read from the server whenever
+ * a page using it opens and whenever the learner comes back to the tab, because completions made
+ * in a lesson since the last read would otherwise be missing. The last result stays on screen
+ * while it refreshes; requests already in flight are shared.
+ */
 export function useAccountCertification(accountId: string | null): CertificationState {
   const state = useCertificationStatus();
   useEffect(() => {
     if (!accountId) return;
-    const current = useCertificationStatus.getState();
-    if (current.accountId !== accountId || current.status === "idle") {
-      void loadCertificationStatus(accountId);
-    }
+    void loadCertificationStatus(accountId);
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadCertificationStatus(accountId);
+    };
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [accountId]);
   if (!accountId || state.accountId !== accountId) return { ...INITIAL, accountId };
   return state;

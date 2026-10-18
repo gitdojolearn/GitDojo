@@ -1,5 +1,5 @@
 import { emptyProgress, type ProgressCatalog } from "@gitdojo/progress";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAccountSession, type AccountSession } from "@/features/auth";
@@ -111,6 +111,12 @@ function serve(body: unknown) {
 }
 
 const status = () => screen.getByTestId("track-status");
+const expectComplete = (count: number) =>
+  waitFor(() => {
+    expect(
+      screen.getByRole("progressbar", { name: "Certification track requirements" }),
+    ).toHaveAttribute("aria-valuetext", `${String(count)} of 11 requirements complete`);
+  });
 const statusOf = (id: string) =>
   screen.getAllByTestId("track-requirement").find((item) => item.dataset.requirement === id);
 
@@ -227,6 +233,30 @@ describe("certification track page", () => {
       within(statusOf("lesson:git-add") ?? document.body).getByTestId("requirement-status"),
     ).toHaveTextContent("Not started");
     expect(screen.queryByTestId("track-get-certificate")).toBeNull();
+  });
+
+  it("re-reads the server when the learner comes back, so finished lessons count", async () => {
+    let completed = IDS.slice(0, 3);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(Response.json(statusBody(completed)))),
+    );
+    signIn();
+    const first = render(<CertificationTrack requirements={INFO} />);
+    await expectComplete(3);
+    first.unmount();
+
+    // A lesson finished elsewhere in the app, then back to the track (client-side navigation).
+    completed = IDS.slice(0, 4);
+    render(<CertificationTrack requirements={INFO} />);
+    await expectComplete(4);
+
+    // Finished in another tab, then back to this one.
+    completed = IDS.slice(0, 5);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expectComplete(5);
   });
 
   it("never offers the certificate when progress can't be loaded, and can try again", async () => {
