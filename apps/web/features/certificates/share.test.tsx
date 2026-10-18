@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -137,7 +137,12 @@ describe("ShareCertificate", () => {
   it("downloads the badge image from the server, and releases it afterwards", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(() =>
-      Promise.resolve(new Response(new Blob(["png"], { type: "image/png" }))),
+      // Plain bytes: Node 22's Response rejects jsdom's Blob, which isn't the platform's.
+      Promise.resolve(
+        new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), {
+          headers: { "Content-Type": "image/png" },
+        }),
+      ),
     );
     vi.stubGlobal("fetch", fetchMock);
     const revoke = vi.fn();
@@ -151,9 +156,12 @@ describe("ShareCertificate", () => {
     });
     render(<Harness />);
     await user.click(screen.getByRole("button", { name: "Download badge image" }));
+    // The download finishes after several awaits; wait for its own announcement.
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("Badge image downloaded.");
+    });
     expect(fetchMock).toHaveBeenCalledWith(`/api/certificates/${ID}/badge`, { cache: "no-store" });
     expect(clicked).toEqual(["gitdojo-badge-git-foundations.png"]);
-    expect(screen.getByRole("status")).toHaveTextContent("Badge image downloaded.");
     await new Promise((resolve) => setTimeout(resolve, 1100));
     expect(revoke).toHaveBeenCalledWith("blob:badge");
   });
@@ -165,7 +173,11 @@ describe("ShareCertificate", () => {
     );
     render(<Harness />);
     await userEvent.setup().click(screen.getByRole("button", { name: "Download badge image" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Couldn't make the badge image right now");
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Couldn't make the badge image right now",
+      );
+    });
   });
 
   it("describes the badge image, with the name only when it is public", () => {
