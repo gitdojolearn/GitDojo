@@ -206,7 +206,7 @@ describe("certificate PDF", () => {
     const text = pdfText(await certificatePdf(certificate(), { compress: false }));
     const url = `${ORIGIN}/verify/${ID}`;
     expect(qr.urls).toEqual([url]);
-    expect(text).toContain(`(Verify at ${url})`);
+    expect(text).toContain(`(Check current status at ${url})`);
     expect(text).toContain(`(Credential ID: ${ID})`);
     expect(text).toContain(`/URI (${url})`);
     expect(text).toContain("(Ada Lovelace)");

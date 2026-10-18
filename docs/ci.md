@@ -92,6 +92,9 @@ and protect `main`:
 4. Require CodeQL results/code-scanning thresholds if supported by your repository plan.
 5. Block force pushes and branch deletion; choose reviewer requirements appropriate to the team.
 
+See [repository-protection.md](./repository-protection.md) for the full recommended ruleset,
+bypass guidance and how to test the rules.
+
 Repository settings are not changed by committing these files. Avoid requiring individual matrix
 job names: `CI required` remains stable as the CI matrix changes. Dependency review is PR-only;
 check how your ruleset applies it before enabling a merge queue requirement.

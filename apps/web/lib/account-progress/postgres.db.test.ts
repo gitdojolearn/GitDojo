@@ -20,6 +20,7 @@ import {
 } from "./api";
 import { createPostgresProgressStore, insertCompletion, upsertUser } from "./postgres-store";
 import { ADA, ADA_ELSEWHERE, apiDeps, GRACE, postLesson, postSync } from "./testing";
+import { revokeCertificate } from "../../scripts/certificate-revocation.mjs";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@asgardeo/nextjs/server", () => ({ asgardeo: vi.fn() }));
@@ -182,6 +183,44 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
           assessment_attempt_id: attempts[1]?.id,
         }),
       ).toBe("23505");
+    });
+  });
+
+  describe("certificate revocation", () => {
+    async function issued(subject: string) {
+      const userId = await upsertUser(sql, identity(subject));
+      const [row] = await sql<{ id: string }[]>`
+        INSERT INTO certificates (user_id, award_key, criteria_version, recipient_name, evidence)
+        VALUES (${userId}, 'git-foundations', 1, 'Revocation Learner', '{}'::jsonb)
+        RETURNING id
+      `;
+      return row?.id ?? "";
+    }
+
+    it("records when, by whom and why, once: a second run keeps the original record", async () => {
+      const id = await issued("revoked-once");
+      const first = await revokeCertificate(sql, { id, by: "ops-ada", reason: "Issued in error" });
+      expect(first.status).toBe("revoked");
+      const again = await revokeCertificate(sql, { id, by: "ops-grace", reason: "Other" });
+      expect(again).toEqual({ status: "already-revoked", revokedAt: first.revokedAt });
+      const [row] = await sql`
+        SELECT revoked_by, revocation_reason FROM certificates WHERE id = ${id}
+      `;
+      expect(row).toEqual({ revoked_by: "ops-ada", revocation_reason: "Issued in error" });
+    });
+
+    it("reports an unknown certificate, and accepts a revocation without a reason", async () => {
+      expect(
+        await revokeCertificate(sql, {
+          id: "00000000-0000-4000-8000-000000000000",
+          by: "ops-ada",
+          reason: null,
+        }),
+      ).toEqual({ status: "not-found" });
+      const id = await issued("revoked-without-reason");
+      expect((await revokeCertificate(sql, { id, by: "ops-ada", reason: null })).status).toBe(
+        "revoked",
+      );
     });
   });
 

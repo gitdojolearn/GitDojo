@@ -3,7 +3,11 @@ import { getVerifiedIdentity } from "@/lib/auth/identity";
 import { isSameOriginRequest } from "@/lib/http/same-origin";
 import { AWARDS, awardKeys, criteriaNarrative, isAwardKey } from "@/lib/certificates/awards";
 import { issueCertificate, ownCertificates } from "@/lib/certificates/store";
-import { prepareCredentialIssuer, verificationUrl } from "@/lib/certificates/credential";
+import {
+  CredentialConfigError,
+  prepareCredentialIssuer,
+  verificationUrl,
+} from "@/lib/certificates/credential";
 
 export const runtime = "nodejs";
 const PRIVATE = { "Cache-Control": "private, no-store" };
@@ -121,7 +125,22 @@ export async function POST(request: Request) {
       );
     }
     return Response.json({ id: result.certificate.id }, { status: 200, headers: PRIVATE });
-  } catch {
+  } catch (error) {
+    if (error instanceof CredentialConfigError) {
+      // For operators: names the missing or invalid setting, never its value.
+      console.error(`[gitdojo] certificate issuance is not configured: ${error.message}`);
+      return Response.json(
+        {
+          error: "issuer_not_configured",
+          message:
+            "Certificates can't be issued on this site yet. Your progress is safe; please try again later.",
+        },
+        { status: 503, headers: PRIVATE },
+      );
+    }
+    // Name and code only: a database error can carry connection details.
+    const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
+    console.error("[gitdojo] certificate issuance failed", { name, code });
     return Response.json({ error: "unavailable" }, { status: 503, headers: PRIVATE });
   }
 }

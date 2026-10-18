@@ -114,6 +114,9 @@ anonymous. In `gitdojo-staging`, set them for **Production** (its staging domain
 | `ASGARDEO_SESSION_COOKIE_EXPIRY_TIME` | Runtime                                       | Optional                    | Optional                             | Seconds, default 86400                                                                        |
 | `GITDOJO_RATE_LIMIT_*`                | Runtime                                       | Optional                    | Optional                             | Per-client burst limits and shared-network multiplier; see [rate limits](./rate-limits.md)    |
 | `ENABLE_EXPERIMENTAL_COREPACK`        | Build                                         | `1`                         | `1`                                  | Pinned pnpm                                                                                   |
+| `NEXT_PUBLIC_SITE_URL`                | Build and runtime                             | Staging HTTPS origin        | Production HTTPS origin              | Public. Printed on certificate PDFs and QR codes; see [certificates](./certificates.md)       |
+| `GITDOJO_CREDENTIAL_KEY_ID`           | Runtime                                       | Stable key ID               | A different stable key ID            | Names the badge signing key, e.g. `rsa-2026-01`                                               |
+| `GITDOJO_CREDENTIAL_PRIVATE_KEY`      | Runtime                                       | Secret                      | A different secret                   | Sensitive. RSA PEM that signs Open Badges; never logged                                       |
 
 Never give a secret a `NEXT_PUBLIC_` name: those are published in the browser bundle. Don't set
 `DATABASE_URL_UNPOOLED` in Vercel; only migrations use it, from GitHub.

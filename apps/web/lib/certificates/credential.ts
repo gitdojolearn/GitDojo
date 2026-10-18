@@ -11,15 +11,28 @@ const LIST_SIZE = 131072;
 const CONTEXT = "https://www.w3.org/ns/credentials/v2";
 const BADGE_CONTEXT = "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json";
 
+/**
+ * A deployment setting certificates need is missing or invalid. The message names the setting
+ * and what is wrong with it, for operators; it never contains key material.
+ */
+export class CredentialConfigError extends Error {
+  override name = "CredentialConfigError";
+}
+
 export function credentialOrigin(): string {
   const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (!raw) throw new Error("NEXT_PUBLIC_SITE_URL is required for certificates");
-  const url = new URL(raw);
+  if (!raw) throw new CredentialConfigError("NEXT_PUBLIC_SITE_URL is required for certificates");
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new CredentialConfigError("NEXT_PUBLIC_SITE_URL is not a valid URL");
+  }
   if (url.protocol !== "https:" && url.hostname !== "localhost") {
-    throw new Error("Certificate site URL must use HTTPS");
+    throw new CredentialConfigError("NEXT_PUBLIC_SITE_URL must use HTTPS for certificates");
   }
   if (url.pathname !== "/" || url.search || url.hash) {
-    throw new Error("Certificate site URL must be an origin");
+    throw new CredentialConfigError("NEXT_PUBLIC_SITE_URL must be an origin, with no path");
   }
   return url.origin;
 }
@@ -35,16 +48,29 @@ export function verificationUrl(id: string): string {
 function signingConfig(): { keyId: string; pem: string } {
   const keyId = process.env.GITDOJO_CREDENTIAL_KEY_ID?.trim();
   const pem = process.env.GITDOJO_CREDENTIAL_PRIVATE_KEY?.replace(/\\n/g, "\n").trim();
-  if (!keyId || !/^[A-Za-z0-9_-]{1,64}$/.test(keyId) || !pem) {
-    throw new Error("Credential signing key is not configured");
+  if (!keyId || !/^[A-Za-z0-9_-]{1,64}$/.test(keyId)) {
+    throw new CredentialConfigError(
+      "GITDOJO_CREDENTIAL_KEY_ID is missing or invalid (1-64 letters, digits, - or _)",
+    );
   }
+  if (!pem) throw new CredentialConfigError("GITDOJO_CREDENTIAL_PRIVATE_KEY is missing");
   return { keyId, pem };
 }
 
 async function signingKey() {
   const { keyId, pem } = signingConfig();
-  const jwk = createPublicKey(pem).export({ format: "jwk" });
-  if (jwk.kty !== "RSA" || !jwk.n || !jwk.e) throw new Error("Credential signing key must be RSA");
+  let jwk;
+  try {
+    jwk = createPublicKey(pem).export({ format: "jwk" });
+  } catch {
+    // The parser's own error is not passed on: it must never echo any of the key.
+    throw new CredentialConfigError(
+      "GITDOJO_CREDENTIAL_PRIVATE_KEY is not a valid PEM private key",
+    );
+  }
+  if (jwk.kty !== "RSA" || !jwk.n || !jwk.e) {
+    throw new CredentialConfigError("GITDOJO_CREDENTIAL_PRIVATE_KEY must be an RSA key");
+  }
   const publicJwk = { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: "RS256", use: "sig", kid: keyId };
   const sql = getDatabase();
   await sql`
@@ -61,7 +87,9 @@ async function signingKey() {
     stored.public_jwk.e !== publicJwk.e ||
     stored.public_jwk.kty !== publicJwk.kty
   ) {
-    throw new Error("Credential key ID already belongs to another public key");
+    throw new CredentialConfigError(
+      "GITDOJO_CREDENTIAL_KEY_ID already belongs to another public key: use a new key ID when rotating keys",
+    );
   }
   return { keyId, key: await importPKCS8(pem, "RS256") };
 }

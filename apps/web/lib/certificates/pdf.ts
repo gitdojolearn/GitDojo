@@ -107,7 +107,8 @@ export async function certificatePdf(
   doc.text("(UTC)", column, y + 60);
 
   // The id and the exact URL as plain text, for when the code can't be scanned.
-  const lines = [`Credential ID: ${certificate.id}`, `Verify at ${url}`];
+  // The PDF is a snapshot; whether it is still valid is only ever on the verification page.
+  const lines = [`Credential ID: ${certificate.id}`, `Check current status at ${url}`];
   doc.setFontSize(7);
   while (
     Math.max(...lines.map((line) => doc.getTextWidth(line))) > FOOTER_WIDTH &&
