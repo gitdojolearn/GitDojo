@@ -5,6 +5,8 @@ import { connectionConfig } from "./connection.mjs";
 
 export type Database = postgres.Sql;
 export type QueryableDatabase = postgres.Sql | postgres.TransactionSql;
+/** A value `sql.json` accepts: what a jsonb column stores. */
+export type JsonValue = postgres.JSONValue;
 
 /** `DATABASE_URL` is missing: account progress is unavailable, anonymous learning is not. */
 export class DatabaseNotConfiguredError extends Error {

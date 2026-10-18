@@ -10,7 +10,7 @@ import {
 import { type VerifiedIdentity } from "@/lib/auth/identity";
 import { upsertUser } from "@/lib/account-progress/postgres-store";
 import { prepareCredentialIssuer } from "@/lib/certificates/credential";
-import { getDatabase, type QueryableDatabase } from "@/lib/db/client";
+import { getDatabase, type JsonValue, type QueryableDatabase } from "@/lib/db/client";
 import { type Certificate } from "@/lib/certificates/store";
 import { gradeCapstone } from "./grader";
 import { CAPSTONE_CRITERIA, CAPSTONE_DESCRIPTION, CAPSTONE_TITLE } from "./rubric";
@@ -81,7 +81,8 @@ export async function submitAttempt(
     await tx`
       UPDATE assessment_attempts
       SET status = ${grade.passed ? "passed" : "failed"}, submitted_at = now(),
-          result = ${JSON.stringify(grade)}::jsonb, evidence = ${JSON.stringify(evidence)}::jsonb
+          result = ${tx.json(grade as unknown as JsonValue)},
+          evidence = ${tx.json(evidence as unknown as JsonValue)}
       WHERE id = ${id}
     `;
     if (!grade.passed) return { grade, credentialId: null, repeated: false };
@@ -103,7 +104,7 @@ export async function submitAttempt(
         evidence, credential_kind, assessment_attempt_id
       ) VALUES (
         ${current.user_id}, ${CAPSTONE_KEY}, ${CAPSTONE_RUBRIC_VERSION}, ${recipientName},
-        ${publicNameConsent}, ${JSON.stringify(assessedEvidence)}::jsonb, 'assessed', ${id}
+        ${publicNameConsent}, ${tx.json(assessedEvidence as unknown as JsonValue)}, 'assessed', ${id}
       )
       ON CONFLICT (user_id, award_key, criteria_version) DO NOTHING
       RETURNING id
