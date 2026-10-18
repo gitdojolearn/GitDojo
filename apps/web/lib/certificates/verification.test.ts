@@ -78,6 +78,7 @@ function certificate(overrides: Partial<Certificate> = {}): Certificate {
     publicNameConsent: false,
     issuedAt: new Date("2026-10-17T10:05:00Z"),
     revokedAt: null,
+    reissueAllowed: false,
     evidence: {
       kind: "completion",
       title: award.title,
@@ -114,6 +115,17 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+describe("criteriaNarrative", () => {
+  it("counts lessons and Practice tasks in the right number", () => {
+    expect(criteriaNarrative("git-foundations")).toMatch(
+      /^Complete 10 named lessons and 1 named Practice mode task in GitDojo\./,
+    );
+    expect(criteriaNarrative("branching-collaboration")).toMatch(
+      /11 named lessons and 2 named Practice mode tasks/,
+    );
+  });
 });
 
 describe("credential ids and URLs", () => {

@@ -24,11 +24,11 @@ import { requestCertificate } from "../services/issue-certificate";
 import { loadCertificationStatus, type IssuedCertificate } from "../state/use-certification-status";
 import {
   CertificateLinks,
-  CopyVerificationLink,
   ISSUED_DATE,
   NameConsentChoice,
   verificationLinkOf,
 } from "./CertificateParts";
+import { ShareCertificate } from "./ShareCertificate";
 import {
   RequirementStatusLabel,
   TrackProgressBar,
@@ -215,7 +215,11 @@ function StatusPanel({
             <IssuedConfirmation certificate={certificate} onAnnounce={onAnnounce} />
           ) : null
         ) : phase === "eligible" ? (
-          <ClaimCertificate accountId={state.accountId} onAnnounce={onAnnounce} />
+          <ClaimCertificate
+            accountId={state.accountId}
+            reissue={state.reissue}
+            onAnnounce={onAnnounce}
+          />
         ) : (
           <ContinueAction progress={progress} requirements={requirements} phase={phase} />
         )}
@@ -311,9 +315,11 @@ function ContinueAction({
 
 function ClaimCertificate({
   accountId,
+  reissue,
   onAnnounce,
 }: {
   accountId: string;
+  reissue: boolean;
   onAnnounce: (message: string) => void;
 }) {
   const [consent, setConsent] = useState(false);
@@ -338,6 +344,13 @@ function ClaimCertificate({
 
   return (
     <div data-testid="track-claim">
+      {reissue ? (
+        <p className="mb-4 text-small text-fg-secondary" data-testid="track-reissue">
+          GitDojo revoked your earlier certificate so that a corrected one can be issued. The new
+          certificate shows your account profile name as it is now, so check the name in the menu at
+          the top of the page before you get it.
+        </p>
+      ) : null}
       <NameConsentChoice value={consent} onChange={setConsent} disabled={busy} />
       <Button
         variant="primary"
@@ -432,7 +445,7 @@ function IssuedConfirmation({
       <div className="mt-4">
         <CertificateLinks item={certificate} />
       </div>
-      <CopyVerificationLink item={certificate} onAnnounce={onAnnounce} />
+      <ShareCertificate item={certificate} onAnnounce={onAnnounce} variant="full" />
     </div>
   );
 }

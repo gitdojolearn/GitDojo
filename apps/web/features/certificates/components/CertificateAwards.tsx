@@ -16,16 +16,13 @@ import {
 } from "../services/award-progress";
 import { requestCertificate } from "../services/issue-certificate";
 import {
+  currentCertificate,
   loadCertificationStatus,
   useAccountCertification,
   type IssuedCertificate,
 } from "../state/use-certification-status";
-import {
-  CertificateLinks,
-  CopyVerificationLink,
-  ISSUED_DATE,
-  NameConsentChoice,
-} from "./CertificateParts";
+import { CertificateLinks, ISSUED_DATE, NameConsentChoice } from "./CertificateParts";
+import { ShareCertificate } from "./ShareCertificate";
 
 const plural = (count: number, noun: string) => `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 
@@ -68,10 +65,9 @@ export function CertificateAwards({
 
   const awards = OTHER_AWARDS.map((key) => {
     const award = AWARDS[key];
-    const item = issued?.find(
-      (candidate) =>
-        candidate.awardKey === key && candidate.criteriaVersion === award.criteriaVersion,
-    );
+    const item = issued
+      ? (currentCertificate(issued, key, award.criteriaVersion) ?? undefined)
+      : undefined;
     // Signed in: the account's stored completions, as issuance counts them. Otherwise a guide
     // from this browser.
     const server = account ? certification.data?.progress[key] : undefined;
@@ -299,7 +295,7 @@ function Earned({
       <div className="mt-3">
         <CertificateLinks item={item} />
       </div>
-      <CopyVerificationLink item={item} onAnnounce={onAnnounce} />
+      <ShareCertificate item={item} onAnnounce={onAnnounce} variant="compact" />
       <p className="mt-2 text-caption text-fg-muted">
         Name on the public page: {item.publicNameConsent ? "shown" : "withheld"}
       </p>

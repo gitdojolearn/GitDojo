@@ -17,7 +17,7 @@ snapshot even if current award definitions later change.
    Store the PEM in your deployment secrets as `GITDOJO_CREDENTIAL_PRIVATE_KEY`. Literal `\n`
    separators are accepted. Never commit the private key. Set a unique, stable
    `GITDOJO_CREDENTIAL_KEY_ID`, such as `rsa-2026-01`.
-3. Apply every migration, through `0009_repair_jsonb_strings`, with
+3. Apply every migration, through `0010_certificate_reissue`, with
    `pnpm --filter @gitdojo/web db:migrate` before deploying the new app. The release health check
    (`/api/health`) expects the latest one and reports a database that is behind.
 4. Keep `DATABASE_URL` configured. Issuance is unavailable without the account database,
@@ -42,6 +42,39 @@ JSON columns (`public_jwk`, `evidence`, `result`) are written with `sql.json(val
 encodes jsonb parameters itself, so passing `JSON.stringify(value)` would store a JSON string:
 that is what made every signing key look like "another public key" before
 `0009_repair_jsonb_strings`, which decodes any such rows back into objects.
+
+## Sharing
+
+An earned certificate (on `/certification` and, folded away, on the dashboard) has a **Share
+certificate** section. Every option leads to the verification URL, the only place that says
+whether the certificate is valid right now; a revoked certificate offers only that link.
+
+- **Add to LinkedIn** opens LinkedIn in a new tab (`rel="noopener noreferrer"`). LinkedIn's Add
+  to Profile [no longer pre-fills certificate details](https://www.linkedin.com/help/linkedin/answer/a528030),
+  so next to the button GitDojo lists what its "Add license or certification" form asks for,
+  each with a copy button: **Name** (`Git Foundations Completion Certificate`), **Issuing
+  organization** (`GitDojo`), **Issue date** (month and year), **Credential ID** and
+  **Credential URL** (the verification URL).
+  - _Setup:_ LinkedIn gives each organization one static Add to Profile link when someone
+    creates an Add to Profile button for the organization's LinkedIn Page (free, no approval,
+    no Page admin needed). Put it in `NEXT_PUBLIC_LINKEDIN_ADD_TO_PROFILE_URL` (an `https` link
+    on `linkedin.com` or `lnkd.in`; anything else is ignored) and redeploy. Until then the button
+    opens LinkedIn's [instructions for adding a certification](https://www.linkedin.com/help/linkedin/answer/a567169).
+    GitDojo never adds its own URL parameters. To have GitDojo's logo next to the certificate,
+    learners pick GitDojo's Page in the "Issuing organization" field.
+- **Copy verification link** copies the canonical URL, with the device's share sheet where the
+  browser has one. If the clipboard is blocked, the link is shown to copy by hand.
+- **Download badge image** gets a 1200 × 1200 PNG from `GET /api/certificates/<id>/badge`. The
+  server draws it with `next/og` from the learner's own stored certificate (401 signed out, 404
+  for anyone else's, 410 once revoked): the GitDojo logo, the award, "Completion certificate",
+  the issue date, the verification URL and the holder's name only if they made it public. It is
+  only a picture: nothing machine-readable is embedded (it is not a "baked" Open Badge), and it
+  proves nothing on its own, which is why it shows the verification URL.
+- **Download signed Open Badge** is the existing `GET /api/credentials/<id>`: the same
+  RS256-signed OpenBadgeCredential JWT, with the revocation status list entry. It includes the
+  holder's name only with their consent. It has not been tested with specific wallets, and
+  GitDojo is not 1EdTech-certified, so compatibility depends on the wallet accepting Open Badges
+  3.0 credentials as a JWT.
 
 ## Certification track
 
@@ -122,10 +155,25 @@ node scripts/revoke-certificate.mjs <credential-uuid> --by "<operator>" --reason
 
 `--by` is required and `--reason` is optional. Migration `0008_certificate_revocation_audit`
 stores both alongside the revocation time for GitDojo's own audit; they are never shown on the
-verification page, in badges or in the status list. Revocation is permanent and runs once: a
-second run reports "already revoked" and keeps the original time, operator and reason. It updates
-both the verification page and the status list. There is deliberately no web endpoint: learners
-can't revoke certificates, including their own, and only someone with database credentials can.
+verification page, in badges or in the status list. Revocation is permanent: a second run keeps
+the original time, operator and reason. It updates both the verification page and the status
+list. There is deliberately no web endpoint: learners can't revoke certificates, including their
+own, and only someone with database credentials can.
+
+**Reissuing.** A revoked certificate still counts as the learner's award for that criteria
+version, so they can't simply issue another. When a certificate was issued with a mistake, such as
+a misspelt name, revoke it with `--allow-reissue`:
+
+```bash
+node scripts/revoke-certificate.mjs <credential-uuid> --by "<operator>" --reason "Misspelt name" --allow-reissue
+```
+
+The old certificate stays revoked, and its verification page and status list say so. The learner
+then fixes the cause (for a name, their account profile, then signs out and in) and uses **Get
+certificate** again, which issues a new certificate with a new ID. `--allow-reissue` also works
+on a certificate revoked earlier without it. Migration `0010_certificate_reissue` makes the
+one-per-award rule a unique index over certificates not marked for reissue, so there is still
+only ever one certificate that counts.
 
 **Claim boundary:** existing lesson and Practice completion endpoints accept learner-reported
 progress and validate the content ID. They do not independently replay exercise outcomes. The

@@ -67,9 +67,12 @@ export function isAwardKey(value: unknown): value is AwardKey {
   return typeof value === "string" && Object.hasOwn(AWARDS, value);
 }
 
+const count = (n: number, noun: string) => `${String(n)} named ${noun}${n === 1 ? "" : "s"}`;
+
+/** Snapshotted into each certificate when it is issued, so changing it never alters old ones. */
 export function criteriaNarrative(key: AwardKey): string {
   const award = AWARDS[key];
-  return `Complete ${award.lessons.length} named lessons and ${award.practice.length} named Practice mode tasks in GitDojo. Completions are learner-reported and content IDs are checked by GitDojo; exercise outcomes are not independently verified by the server.`;
+  return `Complete ${count(award.lessons.length, "lesson")} and ${count(award.practice.length, "Practice mode task")} in GitDojo. Completions are learner-reported and content IDs are checked by GitDojo; exercise outcomes are not independently verified by the server.`;
 }
 
 /**

@@ -10,6 +10,8 @@ export interface IssuedCertificate {
   recipientName: string;
   issuedAt: string;
   revoked: boolean;
+  /** Revoked so that a replacement can be issued: it no longer counts as the learner's award. */
+  reissueAllowed?: boolean;
   publicNameConsent: boolean;
   /** The exact public verification URL; `null` when the server has no site origin configured. */
   verificationUrl?: string | null;
@@ -109,4 +111,20 @@ export function useAccountCertification(accountId: string | null): Certification
 export function resetCertificationStatusForTests(): void {
   inflight = null;
   useCertificationStatus.setState(INITIAL);
+}
+
+/** The certificate that counts for an award: newest first, skipping ones revoked for reissue. */
+export function currentCertificate(
+  certificates: readonly IssuedCertificate[],
+  awardKey: AwardKey,
+  criteriaVersion: number,
+): IssuedCertificate | null {
+  return (
+    certificates.find(
+      (item) =>
+        item.awardKey === awardKey &&
+        item.criteriaVersion === criteriaVersion &&
+        !(item.revoked && item.reissueAllowed),
+    ) ?? null
+  );
 }

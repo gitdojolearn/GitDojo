@@ -4,12 +4,14 @@ export declare const USAGE: string;
 
 export declare function parseRevokeArgs(
   argv: string[],
-): { error: string } | { id: string; by: string; reason: string | null; error?: undefined };
+):
+  | { error: string }
+  | { id: string; by: string; reason: string | null; allowReissue: boolean; error?: undefined };
 
 export declare function revokeCertificate(
   sql: Sql,
-  revocation: { id: string; by: string; reason: string | null },
+  revocation: { id: string; by: string; reason: string | null; allowReissue?: boolean },
 ): Promise<
-  | { status: "revoked" | "already-revoked"; revokedAt: Date }
-  | { status: "not-found"; revokedAt?: undefined }
+  | { status: "revoked" | "already-revoked"; revokedAt: Date; reissueAllowed: boolean }
+  | { status: "not-found"; revokedAt?: undefined; reissueAllowed?: undefined }
 >;

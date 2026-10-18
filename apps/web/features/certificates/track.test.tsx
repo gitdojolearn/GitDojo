@@ -364,8 +364,39 @@ describe("certification track page", () => {
     resetCertificationStatusForTests();
     serve(statusBody(IDS, { certificates: [{ ...ISSUED, revoked: true }] }));
     render(<CertificationTrack requirements={INFO} />);
-    expect(await screen.findByText(/no longer valid/)).toBeInTheDocument();
+    expect(await screen.findByTestId("share-revoked")).toHaveTextContent("no longer valid");
     expect(status()).toHaveAttribute("data-state", "revoked");
+    // Nothing to share but the link that says it was revoked.
+    expect(screen.queryByTestId("share-linkedin")).toBeNull();
+    expect(screen.queryByTestId("share-badge-download")).toBeNull();
+  });
+});
+
+describe("reissue", () => {
+  it("offers a new certificate after one revoked for reissue, and explains why", async () => {
+    serve(statusBody(IDS, { certificates: [{ ...ISSUED, revoked: true, reissueAllowed: true }] }));
+    signIn();
+    render(<CertificationTrack requirements={INFO} />);
+    expect(await screen.findByTestId("track-get-certificate")).toBeInTheDocument();
+    expect(status()).toHaveAttribute("data-state", "eligible");
+    expect(screen.getByTestId("track-reissue")).toHaveTextContent(
+      "revoked your earlier certificate so that a corrected one can be issued",
+    );
+  });
+
+  it("shows the replacement, not the revoked one, once it is issued", async () => {
+    serve(
+      statusBody(IDS, {
+        certificates: [
+          { ...ISSUED, id: "new-certificate", recipientName: "Ada Lovelace" },
+          { ...ISSUED, revoked: true, reissueAllowed: true, recipientName: "ada lovelace" },
+        ],
+      }),
+    );
+    signIn();
+    render(<CertificationTrack requirements={INFO} />);
+    expect(await screen.findByTestId("track-credential-id")).toHaveTextContent("new-certificate");
+    expect(status()).toHaveAttribute("data-state", "completed");
   });
 });
 

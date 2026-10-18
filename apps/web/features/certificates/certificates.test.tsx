@@ -329,7 +329,7 @@ describe("CertificateAwards", () => {
     writeText.mockRejectedValueOnce(new Error("NotAllowedError"));
     await user.click(branching.getByRole("button", { name: "Link copied" }));
     expect(screen.getByRole("status")).toHaveTextContent("Couldn't copy the link.");
-    expect(branching.getByText(url)).toBeInTheDocument();
+    expect(branching.getByText("Verification link:").parentElement).toHaveTextContent(url);
   });
 
   it("says when the account can't be reached", () => {
