@@ -71,3 +71,51 @@ export function criteriaNarrative(key: AwardKey): string {
   const award = AWARDS[key];
   return `Complete ${award.lessons.length} named lessons and ${award.practice.length} named Practice mode tasks in GitDojo. Completions are learner-reported and content IDs are checked by GitDojo; exercise outcomes are not independently verified by the server.`;
 }
+
+/**
+ * One thing an award asks for. `id` is the stable requirement ID and completion key
+ * (`lesson:<id>` or `practice:<id>`), the same key the server reports as missing.
+ */
+export interface AwardRequirement {
+  id: string;
+  kind: "lesson" | "practice";
+  /** The lesson or Practice task ID in the content. */
+  contentId: string;
+  /** 1-based: lessons in the award's order, then Practice tasks. */
+  order: number;
+}
+
+/** An award's requirements in the order a learner should complete them. */
+export function awardRequirements(key: AwardKey): AwardRequirement[] {
+  const award = AWARDS[key];
+  return [
+    ...award.lessons.map((contentId) => ({ kind: "lesson" as const, contentId })),
+    ...award.practice.map((contentId) => ({ kind: "practice" as const, contentId })),
+  ].map((item, index) => ({ ...item, id: `${item.kind}:${item.contentId}`, order: index + 1 }));
+}
+
+/** Completed lesson and Practice task IDs, as stored for an account. */
+export interface CompletionSets {
+  lessons: ReadonlySet<string>;
+  practice: ReadonlySet<string>;
+}
+
+const isDone = (requirement: AwardRequirement, done: CompletionSets) =>
+  (requirement.kind === "lesson" ? done.lessons : done.practice).has(requirement.contentId);
+
+/**
+ * The requirement IDs still missing, in order. The single eligibility rule: issuance refuses a
+ * certificate while this is not empty, and the track page and dashboard show the same list.
+ */
+export function missingRequirements(key: AwardKey, done: CompletionSets): string[] {
+  return awardRequirements(key)
+    .filter((requirement) => !isDone(requirement, done))
+    .map((requirement) => requirement.id);
+}
+
+/** The requirement IDs already complete, in order. */
+export function completedRequirements(key: AwardKey, done: CompletionSets): string[] {
+  return awardRequirements(key)
+    .filter((requirement) => isDone(requirement, done))
+    .map((requirement) => requirement.id);
+}

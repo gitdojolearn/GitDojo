@@ -11,6 +11,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: "Learn", href: "/learn", external: false },
   { label: "Challenges", href: "/challenges", external: false },
   { label: "Practice", href: "/practice", external: false },
+  { label: "Certification", href: "/certification", external: false },
   { label: "Assessment", href: "/assessment", external: false },
   { label: "Playground", href: "/playground", external: false },
   { label: "Dashboard", href: "/dashboard", external: false },

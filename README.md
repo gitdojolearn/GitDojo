@@ -208,7 +208,13 @@ against a dedicated test database: `TEST_DATABASE_URL=... pnpm --filter @gitdojo
 ## Certificates
 
 Signed-in learners can earn three **completion certificates**, and the separate server-graded
-[capstone](docs/assessment.md) can earn an **assessed** credential.
+[capstone](docs/assessment.md) can earn an **assessed** credential. The **certification track**
+(`/certification`, also in the main navigation and on the dashboard) is the guided path to the
+first one, the Git Foundations completion certificate (criteria version 1): ten Git Basics lessons
+and one Practice task, listed in order before you start. Signed in, it shows how many are
+complete, opens the next one, and lets you get, download and share the certificate when they are
+all done. Progress comes from the completions saved to your account, the same records issuing
+checks.
 
 - **Issuance** runs on the server against the account's stored completions, once per learner,
   award and criteria version (a database constraint makes retries and concurrent requests safe).
