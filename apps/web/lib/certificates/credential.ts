@@ -73,9 +73,11 @@ async function signingKey() {
   }
   const publicJwk = { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: "RS256", use: "sig", kid: keyId };
   const sql = getDatabase();
+  // sql.json, not JSON.stringify: the driver already encodes jsonb parameters, and encoding
+  // twice stores a JSON string, which then never matches the key it was made from.
   await sql`
     INSERT INTO certificate_signing_keys (key_id, public_jwk)
-    VALUES (${keyId}, ${JSON.stringify(publicJwk)}::jsonb)
+    VALUES (${keyId}, ${sql.json(publicJwk)})
     ON CONFLICT (key_id) DO NOTHING
   `;
   const [stored] = await sql<{ public_jwk: typeof publicJwk }[]>`

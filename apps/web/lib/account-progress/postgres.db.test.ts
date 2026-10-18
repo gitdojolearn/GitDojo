@@ -5,7 +5,8 @@
 // dedicated test database (its name contains "test"): GitDojo's tables there are dropped and
 // migrated from scratch on every run.
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { generateKeyPairSync } from "node:crypto";
+import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -21,9 +22,20 @@ import {
 import { createPostgresProgressStore, insertCompletion, upsertUser } from "./postgres-store";
 import { ADA, ADA_ELSEWHERE, apiDeps, GRACE, postLesson, postSync } from "./testing";
 import { revokeCertificate } from "../../scripts/certificate-revocation.mjs";
+import { AWARDS } from "@/lib/certificates/awards";
+import { prepareCredentialIssuer } from "@/lib/certificates/credential";
+import { findCertificate, issueCertificate } from "@/lib/certificates/store";
+import { connectionConfig } from "@/lib/db/connection.mjs";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@asgardeo/nextjs/server", () => ({ asgardeo: vi.fn() }));
+// The certificate code reads getDatabase(); give it a connection configured exactly as the app's
+// (prepared statements off, as behind the production pooler), on the test database.
+const app = vi.hoisted((): { sql: unknown } => ({ sql: null }));
+vi.mock("@/lib/db/client", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getDatabase: () => app.sql,
+}));
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL?.trim();
 const APP_DIR = path.resolve(import.meta.dirname, "../..");
@@ -67,9 +79,12 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
     await resetTables(sql);
     const { stdout } = await migrateCommand(url);
     expect(stdout).toContain("Applied 0001_users_and_lesson_completions");
+    const config = connectionConfig(url);
+    app.sql = postgres(config.url, { ...config.options, onnotice: () => undefined });
   });
 
   afterAll(async () => {
+    await (app.sql as postgres.Sql | null)?.end({ timeout: 5 });
     await resetTables(sql);
     await sql.end({ timeout: 5 });
   });
@@ -183,6 +198,104 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
           assessment_attempt_id: attempts[1]?.id,
         }),
       ).toBe("23505");
+    });
+  });
+
+  describe("certificate signing keys and evidence", () => {
+    const pem = () =>
+      generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+        privateKeyEncoding: { type: "pkcs8", format: "pem" },
+        publicKeyEncoding: { type: "spki", format: "pem" },
+      }).privateKey;
+
+    it("register a key as a JSON object, accept it again, and refuse another key under its ID", async () => {
+      const key = pem();
+      vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://gitdojo.example");
+      vi.stubEnv("GITDOJO_CREDENTIAL_KEY_ID", "db-test-key");
+      vi.stubEnv("GITDOJO_CREDENTIAL_PRIVATE_KEY", key);
+      try {
+        await prepareCredentialIssuer();
+        // The second time compares against what the first stored: this failed while the key
+        // was stored as a JSON string.
+        await prepareCredentialIssuer();
+        const [row] = await sql<{ type: string }[]>`
+          SELECT jsonb_typeof(public_jwk) AS type FROM certificate_signing_keys
+          WHERE key_id = 'db-test-key'
+        `;
+        expect(row?.type).toBe("object");
+        vi.stubEnv("GITDOJO_CREDENTIAL_PRIVATE_KEY", pem());
+        await expect(prepareCredentialIssuer()).rejects.toThrow(/already belongs to another/);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("issue a certificate once, with its evidence stored as an object", async () => {
+      const learner = identity("certificate-learner");
+      const userId = await upsertUser(sql, learner);
+      const award = AWARDS["git-foundations"];
+      for (const lessonId of award.lessons) {
+        await insertCompletion(sql, userId, {
+          lessonId,
+          lessonType: "interactive",
+          courseId: "git-basics",
+          xp: 50,
+        });
+      }
+      for (const taskId of award.practice) {
+        await insertCompletion(sql, userId, {
+          kind: "practice",
+          lessonId: taskId,
+          lessonType: "challenge",
+          courseId: null,
+          xp: 0,
+        });
+      }
+      const first = await issueCertificate(learner, "git-foundations", "Ada Lovelace", false);
+      const again = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
+      expect(first.eligible && again.eligible).toBe(true);
+      expect(again.certificate?.id).toBe(first.certificate?.id);
+      const id = first.certificate?.id ?? "";
+      const [row] = await sql<{ type: string }[]>`
+        SELECT jsonb_typeof(evidence) AS type FROM certificates WHERE id = ${id}
+      `;
+      expect(row?.type).toBe("object");
+      const found = await findCertificate(id);
+      expect(found?.evidence.title).toBe("Git Foundations");
+      expect(found?.publicNameConsent).toBe(false);
+    });
+
+    it("are repaired by migration 0009 when they were stored as JSON strings", async () => {
+      const userId = await upsertUser(sql, identity("double-encoded"));
+      // What the old code wrote: a pre-encoded string through a jsonb parameter.
+      const appSql = app.sql as postgres.Sql;
+      await appSql`
+        INSERT INTO certificate_signing_keys (key_id, public_jwk)
+        VALUES ('double-encoded', ${JSON.stringify({ kty: "RSA", n: "abc", e: "AQAB" })}::jsonb)
+      `;
+      const [cert] = await appSql<{ id: string }[]>`
+        INSERT INTO certificates (user_id, award_key, criteria_version, recipient_name, evidence)
+        VALUES (${userId}, 'git-recovery-history', 1, 'Ada', ${JSON.stringify({ title: "T" })}::jsonb)
+        RETURNING id
+      `;
+      const before = await sql<{ type: string }[]>`
+        SELECT jsonb_typeof(public_jwk) AS type FROM certificate_signing_keys
+        WHERE key_id = 'double-encoded'
+      `;
+      expect(before[0]?.type).toBe("string");
+
+      await sql.unsafe(
+        await readFile(path.join(MIGRATIONS_DIR, "0009_repair_jsonb_strings.sql"), "utf8"),
+      );
+      const [key] = await sql<{ jwk: { n: string } }[]>`
+        SELECT public_jwk AS jwk FROM certificate_signing_keys WHERE key_id = 'double-encoded'
+      `;
+      expect(key?.jwk.n).toBe("abc");
+      const [evidence] = await sql<{ evidence: { title: string } }[]>`
+        SELECT evidence FROM certificates WHERE id = ${cert?.id ?? ""}
+      `;
+      expect(evidence?.evidence.title).toBe("T");
     });
   });
 

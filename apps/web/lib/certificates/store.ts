@@ -184,7 +184,7 @@ export async function issueCertificate(
         public_name_consent, evidence
       ) VALUES (
         ${userId}, ${key}, ${award.criteriaVersion}, ${recipientName},
-        ${publicNameConsent}, ${JSON.stringify(evidence)}::jsonb
+        ${publicNameConsent}, ${tx.json(evidence)}
       )
       ON CONFLICT (user_id, award_key, criteria_version) DO NOTHING
       RETURNING *
