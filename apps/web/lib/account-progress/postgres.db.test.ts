@@ -24,6 +24,7 @@ import { ADA, ADA_ELSEWHERE, apiDeps, GRACE, postLesson, postSync } from "./test
 import { revokeCertificate } from "../../scripts/certificate-revocation.mjs";
 import { AWARDS } from "@/lib/certificates/awards";
 import { prepareCredentialIssuer } from "@/lib/certificates/credential";
+import { readCertificateName, saveCertificateName } from "@/lib/certificates/name-store";
 import { findCertificate, issueCertificate } from "@/lib/certificates/store";
 import { connectionConfig } from "@/lib/db/connection.mjs";
 
@@ -64,7 +65,7 @@ function testDatabaseUrl(value: string): string {
 }
 
 const resetTables = (sql: postgres.Sql) =>
-  sql`DROP TABLE IF EXISTS certificate_signing_keys, certificates, assessment_attempts,
+  sql`DROP TABLE IF EXISTS certificate_names, certificate_signing_keys, certificates, assessment_attempts,
       command_stats, device_activity, revealed_hints, last_lessons,
       seen_releases, practice_completions, challenge_completions, lesson_completions, users,
       gitdojo_schema_migrations`;
@@ -201,6 +202,28 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
     });
   });
 
+  /** Completes everything Git Foundations asks for. */
+  async function completeFoundations(userId: string) {
+    const award = AWARDS["git-foundations"];
+    for (const lessonId of award.lessons) {
+      await insertCompletion(sql, userId, {
+        lessonId,
+        lessonType: "interactive",
+        courseId: "git-basics",
+        xp: 50,
+      });
+    }
+    for (const taskId of award.practice) {
+      await insertCompletion(sql, userId, {
+        kind: "practice",
+        lessonId: taskId,
+        lessonType: "challenge",
+        courseId: null,
+        xp: 0,
+      });
+    }
+  }
+
   describe("certificate signing keys and evidence", () => {
     const pem = () =>
       generateKeyPairSync("rsa", {
@@ -233,30 +256,13 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
 
     it("issue a certificate once, with its evidence stored as an object", async () => {
       const learner = identity("certificate-learner");
-      const userId = await upsertUser(sql, learner);
-      const award = AWARDS["git-foundations"];
-      for (const lessonId of award.lessons) {
-        await insertCompletion(sql, userId, {
-          lessonId,
-          lessonType: "interactive",
-          courseId: "git-basics",
-          xp: 50,
-        });
-      }
-      for (const taskId of award.practice) {
-        await insertCompletion(sql, userId, {
-          kind: "practice",
-          lessonId: taskId,
-          lessonType: "challenge",
-          courseId: null,
-          xp: 0,
-        });
-      }
-      const first = await issueCertificate(learner, "git-foundations", "Ada Lovelace", false);
-      const again = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
-      expect(first.eligible && again.eligible).toBe(true);
-      expect(again.certificate?.id).toBe(first.certificate?.id);
-      const id = first.certificate?.id ?? "";
+      await completeFoundations(await upsertUser(sql, learner));
+      await saveCertificateName(learner, { givenName: "Ada", familyName: "Lovelace" });
+      const first = await issueCertificate(learner, "git-foundations", false);
+      const again = await issueCertificate(learner, "git-foundations", true);
+      if (first.status !== "issued" || again.status !== "issued") throw new Error("not issued");
+      expect(again.certificate.id).toBe(first.certificate.id);
+      const id = first.certificate.id;
       const [row] = await sql<{ type: string }[]>`
         SELECT jsonb_typeof(evidence) AS type FROM certificates WHERE id = ${id}
       `;
@@ -269,26 +275,10 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
     it("can be replaced only after a revocation that allows it", async () => {
       const learner = identity("reissue-learner");
       const userId = await upsertUser(sql, learner);
-      const award = AWARDS["git-foundations"];
-      for (const lessonId of award.lessons) {
-        await insertCompletion(sql, userId, {
-          lessonId,
-          lessonType: "interactive",
-          courseId: "git-basics",
-          xp: 50,
-        });
-      }
-      for (const taskId of award.practice) {
-        await insertCompletion(sql, userId, {
-          kind: "practice",
-          lessonId: taskId,
-          lessonType: "challenge",
-          courseId: null,
-          xp: 0,
-        });
-      }
-      const first = await issueCertificate(learner, "git-foundations", "Ada lovelace", true);
-      const firstId = first.certificate?.id ?? "";
+      await completeFoundations(userId);
+      await saveCertificateName(learner, { givenName: "Ada", familyName: "lovelace" });
+      const first = await issueCertificate(learner, "git-foundations", true);
+      const firstId = first.status === "issued" ? first.certificate.id : "";
 
       // A plain revocation keeps blocking a new certificate.
       await revokeCertificate(sql, {
@@ -297,8 +287,9 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         reason: "Check",
         allowReissue: false,
       });
-      const blocked = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
-      expect(blocked.certificate?.id).toBe(firstId);
+      await saveCertificateName(learner, { givenName: "Ada", familyName: "Lovelace" });
+      const blocked = await issueCertificate(learner, "git-foundations", true);
+      expect(blocked).toMatchObject({ status: "issued", certificate: { id: firstId } });
 
       // Allowing reissue afterwards frees the award, and keeps the original revocation record.
       const allowed = await revokeCertificate(sql, {
@@ -308,11 +299,14 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         allowReissue: true,
       });
       expect(allowed).toMatchObject({ status: "already-revoked", reissueAllowed: true });
-      const replaced = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
-      const again = await issueCertificate(learner, "git-foundations", "Ada Lovelace", true);
-      expect(replaced.certificate?.id).not.toBe(firstId);
-      expect(again.certificate?.id).toBe(replaced.certificate?.id);
-      expect(replaced.certificate?.recipientName).toBe("Ada Lovelace");
+      const replaced = await issueCertificate(learner, "git-foundations", true);
+      const again = await issueCertificate(learner, "git-foundations", true);
+      if (replaced.status !== "issued" || again.status !== "issued") throw new Error("not issued");
+      expect(replaced.certificate.id).not.toBe(firstId);
+      expect(again.certificate.id).toBe(replaced.certificate.id);
+      // The replacement carries the corrected name; the revoked one keeps what it was issued with.
+      expect(replaced.certificate.recipientName).toBe("Ada Lovelace");
+      expect((await findCertificate(firstId))?.recipientName).toBe("Ada lovelace");
 
       const rows = await sql<{ revoked: boolean; by: string | null; reason: string | null }[]>`
         SELECT revoked_at IS NOT NULL AS revoked, revoked_by AS by, revocation_reason AS reason
@@ -360,6 +354,110 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         SELECT evidence FROM certificates WHERE id = ${cert?.id ?? ""}
       `;
       expect(evidence?.evidence.title).toBe("T");
+    });
+  });
+
+  describe("certificate names", () => {
+    it("are saved and read for the signed-in account only, in any script", async () => {
+      const zoe = identity("name-zoe");
+      const other = identity("name-other");
+      expect(await readCertificateName(zoe)).toBeNull();
+      const saved = await saveCertificateName(zoe, { givenName: "Zoë", familyName: "Nguyễn" });
+      expect(saved).toMatchObject({ givenName: "Zoë", familyName: "Nguyễn" });
+      expect(await readCertificateName(zoe)).toMatchObject({ givenName: "Zoë" });
+      expect(await readCertificateName(other)).toBeNull();
+
+      const changed = await saveCertificateName(zoe, { givenName: "王", familyName: "" });
+      expect(changed.updatedAt.getTime()).toBeGreaterThanOrEqual(saved.updatedAt.getTime());
+      const [row] = await sql<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM certificate_names n JOIN users u ON u.id = n.user_id
+        WHERE u.subject = 'name-zoe'
+      `;
+      expect(row?.count).toBe(1);
+    });
+
+    it("are refused by the database when empty or too long, and go with the account", async () => {
+      const userId = await upsertUser(sql, identity("name-checks"));
+      const insert = (given: string, family = "") =>
+        sql`INSERT INTO certificate_names (user_id, given_name, family_name)
+            VALUES (${userId}, ${given}, ${family})`.catch(
+          (error: unknown) => (error as { code?: string }).code,
+        );
+      expect(await insert("")).toBe("23514");
+      expect(await insert("A".repeat(61))).toBe("23514");
+      expect(await insert("Ada", "L".repeat(61))).toBe("23514");
+      await insert("Ada");
+      await sql`DELETE FROM users WHERE id = ${userId}`;
+      const [row] = await sql<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM certificate_names WHERE user_id = ${userId}
+      `;
+      expect(row?.count).toBe(0);
+    });
+
+    it("are what issuance prints: never the identity provider's name", async () => {
+      const learner = { ...identity("name-issue"), name: "Provider Name" };
+      await completeFoundations(await upsertUser(sql, learner));
+
+      // No GitDojo name yet: refused, and nothing is stored.
+      expect(await issueCertificate(learner, "git-foundations", true)).toEqual({
+        status: "name_required",
+        reason: "missing",
+        characters: [],
+      });
+      // A name the certificate can't print yet: refused, naming the characters.
+      await saveCertificateName(learner, { givenName: "王", familyName: "小明" });
+      expect(await issueCertificate(learner, "git-foundations", true)).toMatchObject({
+        status: "name_required",
+        reason: "unprintable",
+        characters: ["王", "小", "明"],
+      });
+      const [none] = await sql<{ count: number }[]>`
+        SELECT count(*)::int AS count FROM certificates c JOIN users u ON u.id = c.user_id
+        WHERE u.subject = 'name-issue'
+      `;
+      expect(none?.count).toBe(0);
+
+      await saveCertificateName(learner, { givenName: "Siobhán", familyName: "O’Brien-Núñez" });
+      const issued = await issueCertificate(learner, "git-foundations", true);
+      if (issued.status !== "issued") throw new Error("not issued");
+      expect(issued.certificate.recipientName).toBe("Siobhán O'Brien-Núñez");
+    });
+
+    it("keep issued certificates as they were when the name changes or is removed", async () => {
+      const learner = identity("name-snapshot");
+      const userId = await upsertUser(sql, learner);
+      await completeFoundations(userId);
+      await saveCertificateName(learner, { givenName: "Grace", familyName: "Hopper" });
+      const issued = await issueCertificate(learner, "git-foundations", true);
+      if (issued.status !== "issued") throw new Error("not issued");
+
+      await saveCertificateName(learner, { givenName: "Amazing", familyName: "Grace" });
+      const again = await issueCertificate(learner, "git-foundations", true);
+      expect(again).toMatchObject({
+        status: "issued",
+        certificate: { id: issued.certificate.id, recipientName: "Grace Hopper" },
+      });
+      // Even without a name now, the certificate already issued is still returned, unchanged.
+      await sql`DELETE FROM certificate_names WHERE user_id = ${userId}`;
+      expect(await issueCertificate(learner, "git-foundations", true)).toMatchObject({
+        status: "issued",
+        certificate: { id: issued.certificate.id },
+      });
+      expect((await findCertificate(issued.certificate.id))?.recipientName).toBe("Grace Hopper");
+    });
+
+    it("are issued once under concurrent requests", async () => {
+      const learner = identity("name-concurrent");
+      await completeFoundations(await upsertUser(sql, learner));
+      await saveCertificateName(learner, { givenName: "Ada", familyName: "" });
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => issueCertificate(learner, "git-foundations", false)),
+      );
+      const ids = new Set(
+        results.map((r) => (r.status === "issued" ? r.certificate.id : r.status)),
+      );
+      expect(ids.size).toBe(1);
+      expect([...ids][0]).toMatch(/^[0-9a-f-]{36}$/);
     });
   });
 

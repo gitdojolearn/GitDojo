@@ -242,6 +242,10 @@ Progress is keyed by owner (`ownerKey`): `anonymous`, or `account:<id>` for a si
 Signing in creates a separate record rather than replacing the anonymous one, and anonymous
 progress is never uploaded or merged into an account.
 
+The certificate name is a separate account setting, entered on `/account` and stored in
+PostgreSQL. It is not inferred from the identity-provider profile or learning-progress data.
+Issuance snapshots that name onto each credential; a later edit affects only future credentials.
+
 For a signed-in learner every field in the model above is synced to the account and reaches their
 other devices; see [account-progress.md](./account-progress.md). Authentication tokens are never
 stored in progress records.

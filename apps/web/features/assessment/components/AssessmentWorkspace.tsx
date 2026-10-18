@@ -57,6 +57,8 @@ function lessonFor(attempt: Attempt): LessonDefinition {
 export function submitFailure(status: number): string {
   if (status === 401) return "Your session has ended. Sign in again, then submit.";
   if (status === 404) return "This attempt could not be found. Start a fresh attempt.";
+  if (status === 422)
+    return "You passed, but your credential needs a certificate name. Add it on your account page, then submit this attempt again.";
   if (status === 400 || status === 413)
     return "This attempt's history could not be read. Start a fresh attempt.";
   if (status === 503)
