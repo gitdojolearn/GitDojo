@@ -90,8 +90,9 @@ and Practice tasks. Each certificate has a downloadable PDF, a signed Open Badge
 verification page with its issue date and current valid or revoked status. Learners choose whether
 their name appears on the public page and badge. They enter the name printed on certificates in
 the GitDojo account page; it is stored separately from the identity-provider profile and copied to
-each certificate when issued. These completion awards record learner-reported
-completions; they do not claim to assess Git proficiency. The separate [Git capstone](docs/assessment.md)
+each certificate when issued. Current certificates require server-verified repository evidence
+for hands-on lessons and Practice tasks; concept lessons remain completion records. These awards
+do not claim to assess identity or Git proficiency. The separate [Git capstone](docs/assessment.md)
 grades submitted Git history on the server and can issue an assessed Git Practical Skills credential.
 See [certificate details](docs/certificates.md). Deploying: [docs/deployment.md](docs/deployment.md).
 
@@ -213,7 +214,7 @@ against a dedicated test database: `TEST_DATABASE_URL=... pnpm --filter @gitdojo
 Signed-in learners can earn three **completion certificates**, and the separate server-graded
 [capstone](docs/assessment.md) can earn an **assessed** credential. The **certification track**
 (`/certification`, also in the main navigation and on the dashboard) is the guided path to the
-first one, the Git Foundations completion certificate (criteria version 1): ten Git Basics lessons
+first one, the Git Foundations completion certificate (criteria version 2): ten Git Basics lessons
 and one Practice task, listed in order before you start. Signed in, it shows how many are
 complete, opens the next one, and lets you get, download and share the certificate when they are
 all done. Progress comes from the completions saved to your account, the same records issuing
@@ -221,9 +222,10 @@ checks.
 
 - **Issuance** runs on the server against the account's stored completions, once per learner,
   award and criteria version (a database constraint makes retries and concurrent requests safe).
-- **Completion certificates are learner-reported.** Lesson and Practice completions are recorded
-  from the browser, and only their content IDs are checked, so these certificates record
-  completion, not assessed skill. Only the capstone grades Git history on the server.
+- **Hands-on completion is server verified.** A signed-in browser starts a content-versioned
+  attempt, exports canonical Git objects and repository state, and the server rebuilds that state
+  and runs the same objectives before a hands-on completion can count toward version 2. Concept
+  lessons remain completion records. The capstone is still the separately graded skills credential.
 - **PDF:** made on the server from the stored record. It shows the holder's name, issue date and
   credential ID, plus the verification URL as text and as a QR code, and points readers there for
   the current status.

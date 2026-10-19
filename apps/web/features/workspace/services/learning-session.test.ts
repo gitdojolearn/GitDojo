@@ -40,6 +40,31 @@ const lesson: LessonDefinition = {
 };
 
 describe("LearningSession", () => {
+  it("binds server completion attempts into exported browser evidence", async () => {
+    const binding = {
+      id: "11111111-1111-4111-8111-111111111111",
+      nonce: "server-created-nonce",
+      kind: "lesson" as const,
+      contentId: lesson.id,
+      contentVersion: "a".repeat(64),
+    };
+    const session = new LearningSession(lesson, environment(), undefined, binding);
+    await session.start();
+    await session.execute("git init");
+    await session.execute("git add README.md");
+    await session.execute('git commit -m "Initial commit"');
+
+    const evidence = await session.exportCompletionEvidence();
+
+    expect(evidence).toMatchObject({
+      format: "gitdojo-completion-evidence",
+      attemptId: binding.id,
+      binding,
+      state: { initialized: true, currentBranch: "main" },
+    });
+    expect(evidence?.objects.some((object) => object.type === "commit")).toBe(true);
+  });
+
   it("runs the first-commit flow and completes the lesson", async () => {
     const session = new LearningSession(lesson, environment());
     const initial = await session.start();

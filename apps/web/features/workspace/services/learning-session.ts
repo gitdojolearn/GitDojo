@@ -8,6 +8,8 @@ import {
 } from "@gitdojo/lesson-engine";
 import {
   type AdaptiveHintRecommendation,
+  type CompletionAttemptBinding,
+  type CompletionEvidence,
   type LessonDefinition,
   type LessonValidationResult,
   type RepositoryState,
@@ -40,18 +42,22 @@ export function workspaceIdForLesson(lesson: LessonDefinition): string {
  */
 export class LearningSession extends WorkspaceSession<SessionSnapshot> {
   readonly lessonId: string;
+  readonly completionAttemptId: string | null;
   private progress: LessonProgress;
   private started: Promise<unknown> | null = null;
   private latest: SessionSnapshot | null = null;
+  private readonly checkpoints = new Map<string, CompletionEvidence>();
 
   constructor(
     private readonly lesson: LessonDefinition,
     env: LessonEnvironment,
     /** Challenges use their own workspaces, so ids never clash with lessons. */
     workspaceId: string = workspaceIdForLesson(lesson),
+    private readonly completionAttempt: CompletionAttemptBinding | null = null,
   ) {
     super(workspaceId, env);
     this.lessonId = lesson.id;
+    this.completionAttemptId = completionAttempt?.id ?? null;
     this.progress = createInitialProgress(lesson);
   }
 
@@ -60,9 +66,7 @@ export class LearningSession extends WorkspaceSession<SessionSnapshot> {
    * (React effects can re-run) never re-runs setup and never returns stale state.
    */
   async start(): Promise<SessionSnapshot> {
-    this.started ??= this.enqueue(async () =>
-      this.evaluate(await setupLesson(this.lesson, this.workspaceId, this.env)),
-    );
+    this.started ??= this.enqueue(() => this.setup());
     await this.started;
     // Wait for any queued commands so the snapshot reflects them.
     return this.enqueue(() => Promise.resolve(this.requireLatest()));
@@ -71,12 +75,56 @@ export class LearningSession extends WorkspaceSession<SessionSnapshot> {
   reset(): Promise<SessionSnapshot> {
     return this.enqueue(async () => {
       this.progress = createInitialProgress(this.lesson);
-      return this.evaluate(await resetLesson(this.lesson, this.workspaceId, this.env));
+      this.checkpoints.clear();
+      const repository = await resetLesson(this.lesson, this.workspaceId, this.env);
+      return this.evaluate(repository);
     });
   }
 
+  exportCompletionEvidence(): Promise<CompletionEvidence | null> {
+    return this.enqueue(async () => {
+      if (!this.completionAttempt) return null;
+      const repository = this.requireLatest().repository;
+      if (!repository.initialized) return null;
+      const git = this.env.gitFor(this.workspaceId);
+      await git.bindCompletionAttempt(this.completionAttempt);
+      const evidence = await git.exportCompletionEvidence(repository);
+      const objects = new Map(evidence.objects.map((object) => [object.oid, object]));
+      for (const checkpoint of this.checkpoints.values())
+        for (const object of checkpoint.objects) objects.set(object.oid, object);
+      return {
+        ...evidence,
+        checkpoints: [...this.checkpoints.entries()].map(([objectiveId, checkpoint]) => ({
+          objectiveId,
+          state: checkpoint.state,
+          index: checkpoint.index,
+          workingTree: checkpoint.workingTree,
+        })),
+        objects: [...objects.values()].sort((a, b) => a.oid.localeCompare(b.oid)),
+      };
+    });
+  }
+
+  private async setup(): Promise<SessionSnapshot> {
+    const repository = await setupLesson(this.lesson, this.workspaceId, this.env);
+    return this.evaluate(repository);
+  }
+
   protected async evaluate(repository: RepositoryState): Promise<SessionSnapshot> {
+    if (this.completionAttempt && repository.initialized)
+      await this.env.gitFor(this.workspaceId).bindCompletionAttempt(this.completionAttempt);
     const validation = await validateLesson(this.lesson, { repository });
+    if (this.completionAttempt && repository.initialized) {
+      const missing = validation.objectives.filter(
+        (result) => result.passed && !this.checkpoints.has(result.objectiveId),
+      );
+      if (missing.length > 0) {
+        const evidence = await this.env
+          .gitFor(this.workspaceId)
+          .exportCompletionEvidence(repository);
+        for (const result of missing) this.checkpoints.set(result.objectiveId, evidence);
+      }
+    }
     this.progress = advanceProgress(this.lesson, this.progress, validation);
     // Tips describe the state right now, so they are recomputed rather than accumulated: one
     // stops showing the moment the learner resolves what it describes.

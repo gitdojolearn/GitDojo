@@ -17,7 +17,7 @@ snapshot even if current award definitions later change.
    Store the PEM in your deployment secrets as `GITDOJO_CREDENTIAL_PRIVATE_KEY`. Literal `\n`
    separators are accepted. Never commit the private key. Set a unique, stable
    `GITDOJO_CREDENTIAL_KEY_ID`, such as `rsa-2026-01`.
-3. Apply every migration, including the latest certificate-name migration, with
+3. Apply every migration, through `0012_verified_completions`, with
    `pnpm --filter @gitdojo/web db:migrate` before deploying the new app. The release health check
    (`/api/health`) expects the latest one and reports a database that is behind.
 4. Keep `DATABASE_URL` configured. Issuance is unavailable without the account database,
@@ -87,7 +87,7 @@ whether the certificate is valid right now; a revoked certificate offers only th
 ## Certification track
 
 `/certification` is the learner's guided path to the **Git Foundations completion certificate**
-(criteria version 1), linked from the main navigation and from a card on the dashboard. It lists
+(criteria version 2), linked from the main navigation and from a card on the dashboard. It lists
 every requirement in order before the learner starts: the ten Git Basics lessons, then the
 `commit-one-change` Practice task. Each one has its stable requirement ID (`lesson:<id>` or
 `practice:<id>`), title, the lesson's goal or the task's mission, and a link to the content.
@@ -99,10 +99,11 @@ every requirement in order before the learner starts: the ten Git Basics lessons
   (`completed` and `missing`, from the account's stored completion rows).
 - **Progress.** Signed in, the page and the dashboard card read that report (after uploading any
   pending completions), so they always match what issuing would decide. A requirement is
-  **Complete** when the account has its completion, **In progress** only for the lesson the
-  account opened most recently and hasn't finished (the stored last lesson), and **Not started**
-  otherwise. The next requirement is the first incomplete one in track order. Signed out, no
-  progress is shown: work done without an account never counts.
+  **Complete** when the account has the required verified hands-on completion (or a concept lesson
+  completion), **Complete (not verified yet)** when a hands-on row is only reported, **In progress**
+  only for the lesson the account opened most recently and hasn't finished, and **Not started**
+  otherwise. The next requirement is the first one that does not yet satisfy issuance. Signed out,
+  no progress is shown: work done without an account never counts.
 - **States.** Loading, accounts not configured, signed out (with sign-in and sign-up links that
   return to the track), progress unavailable (with retry; never eligible), not started (**Start
   certification track**), in progress (**Continue track**, opening the next requirement), eligible
@@ -115,8 +116,8 @@ every requirement in order before the learner starts: the ten Git Basics lessons
   Certificates already issued keep the version and the requirement snapshot they were issued
   with, and their verification page keeps showing it.
 
-The other two completion awards and the server-graded capstone are unchanged; the dashboard lists
-the other awards below the track card.
+The other two completion awards use the same version 2 verification rule. The server-graded
+capstone remains separate; the dashboard lists the other awards below the track card.
 
 ## Verification
 
@@ -137,6 +138,9 @@ database by its random ID (`lookupCredential`) and shows:
   criteria version.
 - **Criteria:** the snapshotted criteria, with the required lessons and Practice tasks by their
   current titles.
+- **Verification basis:** criteria version 2 pages say that hands-on completions were verified on
+  GitDojo's server. Older criteria version 1 certificates remain verifiable with their original
+  snapshot and claim wording.
 
 Only `publicCertificate` fields reach the page: no email, account ID or status index. The holder
 is the name stored at issuance when the learner agreed to show it, and "Name withheld by
@@ -183,11 +187,15 @@ on a certificate revoked earlier without it. Migration `0010_certificate_reissue
 one-per-award rule a unique index over certificates not marked for reissue, so there is still
 only ever one certificate that counts.
 
-**Claim boundary:** existing lesson and Practice completion endpoints accept learner-reported
-progress and validate the content ID. They do not independently replay exercise outcomes. The
-three certificates therefore state _completion_, not assessed skill or proficiency. The separate
-Git Practical Skills credential is issued only from the server-graded, versioned capstone evidence
-described in [assessment.md](./assessment.md); it does not upgrade or relabel completion records.
+**Claim boundary and privacy:** version 2 requires server-verified Git repository evidence for
+hands-on lessons and Practice tasks. GitDojo checks the attempt nonce and content version, verifies
+canonical object hashes, reconstructs repository state and reruns the shared objectives. Concept
+lessons remain completion records. The submitted repository payload is not retained: only its
+SHA-256 digest and the objective result summary are stored for audit. This verifies the exercise
+state, but is not proctoring, legal-identity verification or a general assessment of Git
+proficiency. Version 1 certificates keep their original learner-reported claim. The separate Git
+Practical Skills credential remains the server-graded capstone described in
+[assessment.md](./assessment.md).
 
 After deployment, issue a credential in a dedicated test account and check its JWT signature
 against the public JWK URL in the `kid` header. Check that its `iss`, `sub`, `jti`, and `nbf` claims

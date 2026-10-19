@@ -57,6 +57,7 @@ export const config = {
     "/account/:path*",
     "/auth/:path*",
     "/api/auth/:path*",
+    "/api/attempts/:path*",
     "/api/progress/:path*",
     "/api/certificates/:path*",
     "/api/credentials/:path*",

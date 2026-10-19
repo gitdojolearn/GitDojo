@@ -2,9 +2,11 @@
 export const AWARDS = {
   "git-foundations": {
     title: "Git Foundations",
-    description: "GitDojo completion certificate for foundational Git lessons and practice.",
+    description:
+      "GitDojo verified completion certificate for foundational Git lessons and practice.",
     template: "git-foundations-template.png",
-    criteriaVersion: 1,
+    criteriaVersion: 2,
+    conceptLessons: ["what-is-git", "git-vs-github", "working-tree", "staging-area"],
     lessons: [
       "what-is-git",
       "git-vs-github",
@@ -21,9 +23,11 @@ export const AWARDS = {
   },
   "branching-collaboration": {
     title: "Branching & Collaboration",
-    description: "GitDojo completion certificate for branching and merging lessons and practice.",
+    description:
+      "GitDojo verified completion certificate for branching and merging lessons and practice.",
     template: "branching-collaboration-template.png",
-    criteriaVersion: 1,
+    criteriaVersion: 2,
+    conceptLessons: ["what-is-a-branch", "understanding-head", "what-is-merging"],
     lessons: [
       "what-is-a-branch",
       "understanding-head",
@@ -41,9 +45,11 @@ export const AWARDS = {
   },
   "git-recovery-history": {
     title: "Git Recovery & History",
-    description: "GitDojo completion certificate for history and recovery lessons and practice.",
+    description:
+      "GitDojo verified completion certificate for history and recovery lessons and practice.",
     template: "git-recovery-history-template.png",
-    criteriaVersion: 1,
+    criteriaVersion: 2,
+    conceptLessons: ["three-trees"],
     lessons: [
       "git-diff",
       "git-restore",
@@ -72,7 +78,7 @@ const count = (n: number, noun: string) => `${String(n)} named ${noun}${n === 1 
 /** Snapshotted into each certificate when it is issued, so changing it never alters old ones. */
 export function criteriaNarrative(key: AwardKey): string {
   const award = AWARDS[key];
-  return `Complete ${count(award.lessons.length, "lesson")} and ${count(award.practice.length, "Practice mode task")} in GitDojo. Completions are learner-reported and content IDs are checked by GitDojo; exercise outcomes are not independently verified by the server.`;
+  return `Complete ${count(award.lessons.length, "lesson")} and ${count(award.practice.length, "Practice mode task")} in GitDojo. GitDojo replays every hands-on objective from canonical repository evidence on its server; concept lessons are completion records and do not make a skills claim.`;
 }
 
 /**
@@ -101,10 +107,29 @@ export function awardRequirements(key: AwardKey): AwardRequirement[] {
 export interface CompletionSets {
   lessons: ReadonlySet<string>;
   practice: ReadonlySet<string>;
+  verifiedLessons?: ReadonlySet<string>;
+  verifiedPractice?: ReadonlySet<string>;
 }
 
-const isDone = (requirement: AwardRequirement, done: CompletionSets) =>
-  (requirement.kind === "lesson" ? done.lessons : done.practice).has(requirement.contentId);
+export function requirementNeedsVerification(
+  key: AwardKey,
+  requirement: AwardRequirement,
+): boolean {
+  return (
+    requirement.kind === "practice" ||
+    !(AWARDS[key].conceptLessons as readonly string[]).includes(requirement.contentId)
+  );
+}
+
+const isDone = (key: AwardKey, requirement: AwardRequirement, done: CompletionSets) => {
+  if (!requirementNeedsVerification(key, requirement))
+    return done.lessons.has(requirement.contentId);
+  const verified =
+    requirement.kind === "lesson"
+      ? (done.verifiedLessons ?? done.lessons)
+      : (done.verifiedPractice ?? done.practice);
+  return verified.has(requirement.contentId);
+};
 
 /**
  * The requirement IDs still missing, in order. The single eligibility rule: issuance refuses a
@@ -112,13 +137,22 @@ const isDone = (requirement: AwardRequirement, done: CompletionSets) =>
  */
 export function missingRequirements(key: AwardKey, done: CompletionSets): string[] {
   return awardRequirements(key)
-    .filter((requirement) => !isDone(requirement, done))
+    .filter((requirement) => !isDone(key, requirement, done))
     .map((requirement) => requirement.id);
 }
 
 /** The requirement IDs already complete, in order. */
 export function completedRequirements(key: AwardKey, done: CompletionSets): string[] {
   return awardRequirements(key)
-    .filter((requirement) => isDone(requirement, done))
+    .filter((requirement) => isDone(key, requirement, done))
+    .map((requirement) => requirement.id);
+}
+
+/** Requirements with any completion row, including hands-on work not verified yet. */
+export function reportedRequirements(key: AwardKey, done: CompletionSets): string[] {
+  return awardRequirements(key)
+    .filter((requirement) =>
+      (requirement.kind === "lesson" ? done.lessons : done.practice).has(requirement.contentId),
+    )
     .map((requirement) => requirement.id);
 }

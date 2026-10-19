@@ -29,15 +29,21 @@ export default async function AchievementPage({
       </>
     );
   }
-  if (!isAwardKey(key) || version !== `v${AWARDS[key].criteriaVersion}`) notFound();
+  if (!isAwardKey(key) || (version !== `v${AWARDS[key].criteriaVersion}` && version !== "v1"))
+    notFound();
   const award = AWARDS[key];
+  const legacy = version === "v1";
   return (
     <>
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
         <h1 className="text-h1 font-semibold text-fg">{award.title}</h1>
         <p className="mt-3 text-body text-fg-secondary">{award.description}</p>
-        <p className="mt-6 text-body text-fg-secondary">{criteriaNarrative(key)}</p>
+        <p className="mt-6 text-body text-fg-secondary">
+          {legacy
+            ? `Complete the named GitDojo lessons and Practice tasks. Version 1 records learner-reported completion and does not independently verify exercise outcomes.`
+            : criteriaNarrative(key)}
+        </p>
         <h2 className="mt-8 text-h3 font-semibold text-fg">Required lessons</h2>
         <ul className="mt-3 list-disc pl-5 text-fg-secondary">
           {award.lessons.map((id) => (
@@ -51,7 +57,10 @@ export default async function AchievementPage({
           ))}
         </ul>
         <p className="mt-8 text-small text-fg-muted">
-          Criteria version {award.criteriaVersion}. GitDojo completion records are learner-reported.
+          Criteria version {legacy ? 1 : award.criteriaVersion}.{" "}
+          {legacy
+            ? "GitDojo completion records are learner-reported."
+            : "Hands-on objectives are verified on GitDojo's server from canonical repository evidence."}
         </p>
       </main>
     </>

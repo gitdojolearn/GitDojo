@@ -14,6 +14,7 @@ import {
   type ProgressCatalog,
   type ProgressOwner,
 } from "@gitdojo/progress";
+import { type CompletionEvidence } from "@gitdojo/shared-types";
 import { useMemo } from "react";
 import { create } from "zustand";
 import { loadAccountSession, useAccountSession } from "@/features/auth";
@@ -157,7 +158,10 @@ function save(action: ProgressAction): Promise<void> {
  * Records learning activity. Safe to call at any time: before progress has loaded, actions wait
  * and are applied in order once it has.
  */
-export function recordProgress(action: ProgressAction): Promise<void> {
+export function recordProgress(
+  action: ProgressAction,
+  evidence?: CompletionEvidence,
+): Promise<void> {
   const { progress } = useProgressStore.getState();
   if (!repository || progress === null) {
     pending.push(action);
@@ -167,11 +171,12 @@ export function recordProgress(action: ProgressAction): Promise<void> {
   // Only a first completion goes to the account; replays never send (or earn) anything again.
   const upload =
     action.type === "complete" &&
-    progress[COMPLETION_FIELDS[action.content.kind]][action.content.id] === undefined &&
+    (progress[COMPLETION_FIELDS[action.content.kind]][action.content.id] === undefined ||
+      evidence !== undefined) &&
     useProgressStore.getState().mode !== "anonymous";
   useProgressStore.setState({ progress: applyProgressAction(progress, action, Date.now()) });
   const saved = save(action);
-  if (upload) void uploadLesson(action.content.id, action.content.kind);
+  if (upload) void uploadLesson(action.content.id, action.content.kind, evidence);
   if (SYNCED_ACTIONS.has(action.type)) markDirty();
   return saved;
 }
@@ -325,11 +330,12 @@ function retry(): void {
 async function uploadLesson(
   lessonId: string,
   kind: CompletionUploadKind = "lesson",
+  evidence?: CompletionEvidence,
 ): Promise<boolean> {
   uploading += 1;
   updateSaving();
   try {
-    const result = await uploadLessonCompletion(lessonId, accountFetch, kind);
+    const result = await uploadLessonCompletion(lessonId, accountFetch, kind, evidence);
     switch (result.status) {
       case "ok":
         await save({
@@ -393,8 +399,11 @@ export async function syncCompletionsNow(): Promise<void> {
   await uploadPending(progress, account.lessons, catalog, account.challenges, account.practice);
 }
 
-export function recordCompletion(content: ContentRef): Promise<void> {
-  return recordProgress({ type: "complete", content });
+export function recordCompletion(
+  content: ContentRef,
+  evidence?: CompletionEvidence,
+): Promise<void> {
+  return recordProgress({ type: "complete", content }, evidence);
 }
 
 /**

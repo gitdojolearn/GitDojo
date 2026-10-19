@@ -24,8 +24,9 @@ interface PublicCertificateBase {
 export type PublicCertificate = PublicCertificateBase &
   (
     | {
-        /** Awarded for learner-reported lesson and Practice completions. */
+        /** v1 is reported completion; v2+ requires server-verified hands-on work. */
         kind: "completion";
+        serverVerified?: boolean;
         lessons: string[];
         practice: string[];
       }
@@ -73,6 +74,7 @@ export function publicCertificate(certificate: Certificate): PublicCertificate {
   return {
     ...base,
     kind: "completion",
+    serverVerified: certificate.criteriaVersion >= 2,
     lessons: [...evidence.lessons],
     practice: [...evidence.practice],
   };

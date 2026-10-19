@@ -28,7 +28,7 @@ function request(path: string, client = CLIENT, address = "203.0.113.42"): NextR
 }
 
 describe("sensitive request rate limiter", () => {
-  it.each(["/sign-in", "/sign-up", "/api/auth/session", "/api/progress/lessons"])(
+  it.each(["/sign-in", "/sign-up", "/api/auth/session", "/api/progress/lessons", "/api/attempts"])(
     "allows requests through the configured limit, then refuses %s",
     (path) => {
       const limiter = new SensitiveRequestRateLimiter(() => 1_000);

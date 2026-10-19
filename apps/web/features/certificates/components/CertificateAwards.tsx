@@ -92,8 +92,9 @@ export function CertificateAwards({
       </div>
       <p className="mt-2 max-w-3xl text-small text-fg-secondary">
         Finish each set of lessons and Practice tasks to receive a GitDojo completion certificate.
-        These awards record learner-reported progress in GitDojo; they are not an assessment of Git
-        proficiency.
+        Hands-on requirements are verified on GitDojo&apos;s server from repository evidence;
+        concept lessons remain completion records. These certificates are not proctored identity
+        assessments and are not an assessment of Git proficiency.
       </p>
       {mode === "anonymous" ? (
         <p className="mt-3 text-small text-fg-secondary" data-testid="certificates-sign-in">

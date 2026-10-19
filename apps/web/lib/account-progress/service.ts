@@ -4,6 +4,7 @@ import {
   type CompletionKind,
   type DeviceActivity,
   type NewCompletion,
+  type NewCompletionVerification,
   type ProgressApiDeps,
   type RecordResult,
   type StoredActivity,
@@ -129,20 +130,23 @@ export type RecordOutcome =
 
 /**
  * Records that the learner completed a lesson, challenge or practice task. Idempotent: XP is only ever awarded
- * once. This is learner-reported progress: the content must exist, but its exercises are not
- * re-checked here.
+ * once. The HTTP adapter may attach server-checked verification metadata; without it the row is
+ * intentionally learner-reported.
  */
 export async function recordCompletion(
   deps: ProgressApiDeps,
   identity: VerifiedIdentity,
   kind: CompletionKind,
   id: string,
+  verification?: NewCompletionVerification,
 ): Promise<RecordOutcome> {
   const catalog = await progressStep("catalog", () => deps.catalog());
   const completion = COMPLETION_KINDS[kind](catalog, id);
   if (!completion) return { status: "unknown" };
   const result = await progressStep("database", () =>
-    deps.store().recordCompletion(identity, completion),
+    deps
+      .store()
+      .recordCompletion(identity, { ...completion, ...(verification ? { verification } : {}) }),
   );
   return { status: "recorded", catalog, totalXp: sumXp(result.completions), ...result };
 }

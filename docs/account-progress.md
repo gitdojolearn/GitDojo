@@ -6,7 +6,7 @@ GitDojo works exactly as before. Deployment (Vercel, Neon, releases): [deploymen
 
 **What exists**
 
-- `users`, `lesson_completions`, `challenge_completions`, `practice_completions`,
+- `users`, `completion_attempts`, `lesson_completions`, `challenge_completions`, `practice_completions`,
   `command_stats`, `device_activity`, `revealed_hints`, `last_lessons` and `seen_releases` tables,
   with versioned migrations and `pnpm db:migrate`.
 - `GET /api/progress`, `POST /api/progress/lessons`, `POST /api/progress/challenges`,
@@ -49,10 +49,18 @@ counters separate from the account's.
 **XP is never uploaded.** Only a content id is, and the server computes the XP from the content
 catalog. The sync payload carries no XP, no completions and no account id.
 
-> **Learner-reported progress.** `POST /api/progress/lessons` records that the learner _says_
-> they completed a lesson. The server checks that the lesson exists and computes its XP, but it
-> doesn't replay or validate the exercise, because exercises run in the browser. Don't treat
-> account XP as proof of skill until server-side validation exists.
+**Reported and verified completions.** The existing completion endpoints still accept a content ID
+without evidence. That path remains `reported`, preserves anonymous/offline behavior and awards XP
+as before. For signed-in hands-on work the browser first creates `POST /api/attempts`, binds its
+nonce and current content version into the lesson repository, and submits canonical Git objects,
+refs, index and working-tree data with the completion. The server verifies every object hash,
+rebuilds `RepositoryState`, and runs the shared objective validator. A passing row is stored as
+`verified` with its attempt and verification time; an existing reported row is upgraded in place.
+
+An attempt is single-use. An identical retry is idempotent, while a different payload, nonce,
+content item, account or content version is rejected. The full repository evidence is processed in
+memory and is not retained. PostgreSQL stores only the SHA-256 evidence digest and objective result
+summary on `completion_attempts`; completion rows store the attempt id and verification time.
 
 ## In the browser
 
@@ -443,7 +451,7 @@ Manual, with a configured tenant and database:
 
 ## Known limitations
 
-- Progress is learner-reported (see above).
+- Concept lessons and evidence-free/offline completions are learner-reported (see above).
 - Anonymous browser progress isn't merged into accounts.
 - An account's browser cache stays in IndexedDB after signing out (it is never shown to anyone
   else); clearing site data removes it.

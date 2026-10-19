@@ -183,11 +183,15 @@ export function badgePayload(certificate: Certificate) {
         name:
           certificate.credentialKind === "assessed"
             ? "GitDojo server-graded capstone result"
-            : "GitDojo account completion record",
+            : certificate.criteriaVersion >= 2
+              ? "GitDojo server-verified completion record"
+              : "GitDojo account completion record",
         description:
           certificate.credentialKind === "assessed"
             ? "A versioned rubric result derived by GitDojo from canonical Git objects and history."
-            : "Server-stored learner-reported completions for the named lessons and practice tasks.",
+            : certificate.criteriaVersion >= 2
+              ? "Hands-on objectives verified on GitDojo's server from canonical repository evidence; concept lessons are completion records."
+              : "Server-stored learner-reported completions for the named lessons and practice tasks.",
         ...(award.kind === "assessed"
           ? {
               rubricVersion: award.grade.rubricVersion,

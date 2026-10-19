@@ -97,7 +97,7 @@ interface Issued {
 function statusBody(branchingDone: readonly string[], certificates: Issued[] = []) {
   return {
     certificates: certificates.map((item) => ({
-      criteriaVersion: 1,
+      criteriaVersion: 2,
       recipientName: "Ada Lovelace",
       issuedAt: "2026-10-17T10:00:00.000Z",
       revoked: false,

@@ -54,19 +54,26 @@ export async function certificatePdf(
   const image = await readFile(path.join(process.cwd(), "public", "certificates", award.template));
   doc.addImage(new Uint8Array(image), "PNG", 0, 0, width, height, undefined, "FAST");
 
-  // Covers the artwork's fixed claim about demonstrated skills; the current API records
-  // learner-reported completion, so that stronger claim would be inaccurate.
+  const serverVerified = certificate.criteriaVersion >= 2;
+  // Covers the artwork's fixed claim with the exact versioned claim this certificate makes.
   doc.setFillColor(255, 255, 255);
   doc.rect(108, 402, 625, 66, "F");
   doc.setTextColor(10, 35, 85);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(14);
-  doc.text("For completing the required GitDojo lessons and Practice mode tasks.", width / 2, 436, {
-    align: "center",
-  });
+  doc.text(
+    serverVerified
+      ? "For completing the required GitDojo work, with hands-on objectives verified on the server."
+      : "For completing the required GitDojo lessons and Practice mode tasks.",
+    width / 2,
+    436,
+    { align: "center" },
+  );
   doc.setFontSize(9);
   doc.text(
-    "Completion records are learner-reported; exercise outcomes are not independently checked.",
+    serverVerified
+      ? "Canonical repository evidence was checked by GitDojo; this is not proctoring or identity verification."
+      : "Completion records are learner-reported; exercise outcomes are not independently checked.",
     width / 2,
     453,
     {

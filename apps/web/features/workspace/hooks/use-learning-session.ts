@@ -2,7 +2,11 @@
 
 import { type CommandExecutionResult } from "@gitdojo/command-parser";
 import { type LessonEnvironment } from "@gitdojo/lesson-engine";
-import { type LessonDefinition } from "@gitdojo/shared-types";
+import {
+  type CompletionEvidence,
+  type CompletionKind,
+  type LessonDefinition,
+} from "@gitdojo/shared-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { explainOutcome, useExplanationStore } from "@/features/errors";
 import { useLessonStore } from "@/features/lesson";
@@ -12,6 +16,7 @@ import { createBrowserLessonEnvironment } from "../services/browser-environment"
 import { settleEditor } from "../services/git-editor";
 import { useGitEditorStore } from "../state/use-git-editor-store";
 import { LearningSession, type SessionSnapshot } from "../services/learning-session";
+import { startCompletionAttempt } from "@/features/progress";
 
 export type SessionStatus = "loading" | "ready" | "error";
 
@@ -25,6 +30,7 @@ export interface LearningSessionControls {
   deleteFile: (path: string) => Promise<void>;
   reset: () => Promise<void>;
   retry: () => void;
+  exportCompletionEvidence: () => Promise<CompletionEvidence | null>;
 }
 
 function publish(snapshot: SessionSnapshot): void {
@@ -43,10 +49,12 @@ export function useLearningSession(
   lesson: LessonDefinition,
   {
     workspaceId,
+    completionKind = "lesson",
     createEnvironment = createBrowserLessonEnvironment,
   }: {
     /** Defaults to the lesson's own workspace; challenges pass theirs. */
     workspaceId?: string;
+    completionKind?: CompletionKind;
     createEnvironment?: () => LessonEnvironment;
   } = {},
 ): LearningSessionControls {
@@ -68,21 +76,33 @@ export function useLearningSession(
   useEffect(() => {
     let cancelled = false;
     // Created in an effect because the environment needs IndexedDB, which only exists in browsers.
-    if (sessionRef.current?.lessonId !== lessonId) {
-      sessionRef.current = new LearningSession(
-        lessonRef.current,
-        environmentRef.current(),
-        workspaceRef.current,
-      );
-    }
-    const session = sessionRef.current;
-    useRepositoryStore.getState().setWorkspace(session.workspaceId);
+    let session: LearningSession | null = null;
     useLessonStore.getState().startLesson();
     useExplanationStore.getState().dismiss();
-
-    session.start().then(
+    const initialize = async () => {
+      const binding =
+        lessonRef.current.objectives.length > 0
+          ? await startCompletionAttempt(completionKind, lessonId)
+          : null;
+      if (cancelled) return null;
+      if (
+        sessionRef.current?.lessonId !== lessonId ||
+        sessionRef.current.completionAttemptId !== (binding?.id ?? null)
+      ) {
+        sessionRef.current = new LearningSession(
+          lessonRef.current,
+          environmentRef.current(),
+          workspaceRef.current,
+          binding,
+        );
+      }
+      session = sessionRef.current;
+      useRepositoryStore.getState().setWorkspace(session.workspaceId);
+      return session.start();
+    };
+    initialize().then(
       (snapshot) => {
-        if (cancelled) return;
+        if (cancelled || snapshot === null) return;
         publish(snapshot);
         setStatus("ready");
       },
@@ -97,7 +117,7 @@ export function useLearningSession(
     return () => {
       cancelled = true;
     };
-  }, [lessonId, attempt]);
+  }, [lessonId, completionKind, attempt]);
 
   const execute = useCallback(async (input: string): Promise<CommandExecutionResult> => {
     const session = sessionRef.current;
@@ -172,6 +192,11 @@ export function useLearningSession(
     setAttempt((value) => value + 1);
   }, []);
 
+  const exportCompletionEvidence = useCallback(() => {
+    const session = sessionRef.current;
+    return session ? session.exportCompletionEvidence() : Promise.resolve(null);
+  }, []);
+
   return {
     status,
     errorDetails,
@@ -182,5 +207,6 @@ export function useLearningSession(
     deleteFile,
     reset,
     retry,
+    exportCompletionEvidence,
   };
 }

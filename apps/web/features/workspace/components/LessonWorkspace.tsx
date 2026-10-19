@@ -48,9 +48,11 @@ export function LessonWorkspace({ lesson, course, challenge }: LessonWorkspacePr
     deleteFile,
     reset,
     retry,
+    exportCompletionEvidence,
   } = useLearningSession(lesson, {
     // Challenges get their own workspaces, so their ids never clash with lessons'.
     workspaceId: challenge ? `challenge-${lesson.id}` : undefined,
+    completionKind: challenge ? "challenge" : "lesson",
   });
   const terminalRef = useRef<TerminalHandle>(null);
   const [tab, setTab] = useState<WorkspaceTab>("lesson");
@@ -78,6 +80,7 @@ export function LessonWorkspace({ lesson, course, challenge }: LessonWorkspacePr
     ...(course ? { courseId: course.id } : {}),
     challenge: challenge !== undefined,
     completed,
+    exportCompletionEvidence,
   });
 
   const position = course ? lessonNeighbors(course, lesson.slug) : null;

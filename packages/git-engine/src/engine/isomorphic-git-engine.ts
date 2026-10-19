@@ -40,6 +40,7 @@ import { type GitDojoFs } from "../filesystem/types";
 import { workspaceRoot } from "../filesystem/paths";
 import { type GitContext } from "./context";
 import { assessmentEvidence } from "./assessment-evidence";
+import { bindCompletionAttempt, completionEvidence } from "./completion-evidence";
 import { editorOpenMessage, readEditorRecord } from "./editor-state";
 import { failure, gitError, unexpected } from "./errors";
 import {
@@ -301,6 +302,14 @@ export class IsomorphicGitEngine implements GitEngine {
 
   exportAssessmentEvidence(attemptId: string) {
     return assessmentEvidence(this.ctx, attemptId);
+  }
+
+  bindCompletionAttempt(binding: Parameters<typeof bindCompletionAttempt>[1]) {
+    return bindCompletionAttempt(this.ctx, binding);
+  }
+
+  exportCompletionEvidence(state: Parameters<typeof completionEvidence>[1]) {
+    return completionEvidence(this.ctx, state);
   }
 }
 

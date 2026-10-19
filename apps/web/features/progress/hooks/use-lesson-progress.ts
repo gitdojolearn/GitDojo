@@ -1,7 +1,11 @@
 "use client";
 
 import { type ContentRef } from "@gitdojo/progress";
-import { lessonTypeOf, type LessonDefinition } from "@gitdojo/shared-types";
+import {
+  lessonTypeOf,
+  type CompletionEvidence,
+  type LessonDefinition,
+} from "@gitdojo/shared-types";
 import { useCallback, useEffect, useMemo } from "react";
 import { recordCompletion, recordProgress } from "../state/use-progress-store";
 
@@ -24,12 +28,14 @@ export function useLessonProgress({
   courseId,
   challenge,
   completed,
+  exportCompletionEvidence,
 }: {
   lesson: LessonDefinition;
   courseId?: string;
   challenge: boolean;
   /** From validation of repository state, never from the commands typed. */
   completed: boolean;
+  exportCompletionEvidence?: () => Promise<CompletionEvidence | null>;
 }): LessonProgressTracking {
   const type = lessonTypeOf(lesson);
   const content = useMemo<ContentRef>(
@@ -45,8 +51,12 @@ export function useLessonProgress({
   }, [courseId, lesson.id]);
 
   useEffect(() => {
-    if (completed) void recordCompletion(content);
-  }, [completed, content]);
+    if (!completed) return;
+    void (async () => {
+      const evidence = await exportCompletionEvidence?.().catch(() => null);
+      await recordCompletion(content, evidence ?? undefined);
+    })();
+  }, [completed, content, exportCompletionEvidence]);
 
   const recordHint = useCallback(
     (objectiveId: string, index: number) => {

@@ -20,6 +20,7 @@ export const STATUS_DISPLAY: Record<
   { label: string; icon: LucideIcon; tone: string }
 > = {
   complete: { label: "Complete", icon: CircleCheck, tone: "text-success" },
+  reported: { label: "Complete (not verified yet)", icon: CircleDot, tone: "text-warning" },
   "in-progress": { label: "In progress", icon: CircleDot, tone: "text-accent" },
   "not-started": { label: "Not started", icon: Circle, tone: "text-fg-muted" },
 };

@@ -156,10 +156,10 @@ Every dashboard view is derived from the stored record and the catalog; none add
   server's, set when it first reaches the account: work done offline is dated on the day it syncs.
 - **Most used commands** (`commandSummary`): the counters described above, including other
   devices' for an account. Bars only illustrate the numbers shown beside them.
-- **Completion certificates**: requirement counts and the next requirement come from this
-  browser's completions and the award's fixed lists (`awardProgress`, in
-  `features/certificates`). They are a guide; the server still checks the account's own
-  completion rows on issue (see [certificates.md](./certificates.md)).
+- **Completion certificates**: requirement counts and the next requirement come from the award's
+  fixed lists (`awardProgress`, in `features/certificates`). Account views distinguish reported
+  hands-on work from work verified by the server; anonymous browser counts remain only a guide.
+  Issuance checks the account's own verified rows (see [certificates.md](./certificates.md)).
 
 ## Storage
 

@@ -20,6 +20,8 @@ interface CompletionRow {
   course_id: string | null;
   xp: number;
   completed_at: Date;
+  verification: "reported" | "verified";
+  verified_at: Date | null;
 }
 
 const toCompletion = (row: CompletionRow): StoredCompletion => ({
@@ -29,6 +31,8 @@ const toCompletion = (row: CompletionRow): StoredCompletion => ({
   courseId: row.course_id,
   xp: row.xp,
   completedAt: row.completed_at,
+  verification: row.verification,
+  verifiedAt: row.verified_at,
 });
 
 /**
@@ -56,15 +60,16 @@ export async function upsertUser(sql: Queryable, identity: VerifiedIdentity): Pr
 
 export async function listCompletions(sql: Queryable, userId: string): Promise<StoredCompletion[]> {
   const rows = await sql<CompletionRow[]>`
-    SELECT lesson_id, lesson_type, course_id, xp, completed_at, NULL AS kind
+    SELECT lesson_id, lesson_type, course_id, xp, completed_at, verification, verified_at,
+      NULL AS kind
     FROM lesson_completions WHERE user_id = ${userId}
     UNION ALL
     SELECT challenge_id AS lesson_id, 'challenge' AS lesson_type, NULL AS course_id,
-      xp, completed_at, 'challenge' AS kind
+      xp, completed_at, verification, verified_at, 'challenge' AS kind
     FROM challenge_completions WHERE user_id = ${userId}
     UNION ALL
     SELECT task_id AS lesson_id, 'challenge' AS lesson_type, NULL AS course_id,
-      0 AS xp, completed_at, 'practice' AS kind
+      0 AS xp, completed_at, verification, verified_at, 'practice' AS kind
     FROM practice_completions WHERE user_id = ${userId}
     ORDER BY completed_at, lesson_id
   `;
@@ -80,17 +85,48 @@ export async function insertCompletion(
   userId: string,
   completion: NewCompletion,
 ): Promise<{ created: boolean; completion: StoredCompletion }> {
+  const verification = completion.verification;
+  if (verification) {
+    const [attempt] = await sql<{ id: string }[]>`
+      UPDATE completion_attempts
+      SET used_at = COALESCE(used_at, now()), evidence_hash = ${verification.evidenceHash},
+          objective_results = ${sql.json(verification.objectiveResults as never)}
+      WHERE id = ${verification.attemptId} AND user_id = ${userId}
+        AND (used_at IS NULL OR evidence_hash = ${verification.evidenceHash})
+      RETURNING id
+    `;
+    if (!attempt) throw new Error("completion attempt is unavailable");
+  }
+  const verificationStatus = verification ? "verified" : "reported";
+  const attemptId = verification?.attemptId ?? null;
   if (completion.kind === "practice") {
-    const [inserted] = await sql<{ task_id: string; completed_at: Date }[]>`
-      INSERT INTO practice_completions (user_id, task_id)
-      VALUES (${userId}, ${completion.lessonId})
-      ON CONFLICT (user_id, task_id) DO NOTHING
-      RETURNING task_id, completed_at
+    const [inserted] = await sql<
+      {
+        task_id: string;
+        completed_at: Date;
+        verification: "reported" | "verified";
+        verified_at: Date | null;
+      }[]
+    >`
+      INSERT INTO practice_completions (user_id, task_id, verification, attempt_id, verified_at)
+      VALUES (${userId}, ${completion.lessonId}, ${verificationStatus}, ${attemptId},
+              ${verification ? sql`now()` : null})
+      ON CONFLICT (user_id, task_id) DO UPDATE
+        SET verification = 'verified', attempt_id = EXCLUDED.attempt_id, verified_at = EXCLUDED.verified_at
+        WHERE practice_completions.verification = 'reported' AND EXCLUDED.verification = 'verified'
+      RETURNING task_id, completed_at, verification, verified_at
     `;
     const [existing] = inserted
       ? [inserted]
-      : await sql<{ task_id: string; completed_at: Date }[]>`
-      SELECT task_id, completed_at FROM practice_completions
+      : await sql<
+          {
+            task_id: string;
+            completed_at: Date;
+            verification: "reported" | "verified";
+            verified_at: Date | null;
+          }[]
+        >`
+      SELECT task_id, completed_at, verification, verified_at FROM practice_completions
       WHERE user_id = ${userId} AND task_id = ${completion.lessonId}
     `;
     return {
@@ -102,20 +138,42 @@ export async function insertCompletion(
         courseId: null,
         xp: 0,
         completedAt: existing.completed_at,
+        verification: existing.verification,
+        verifiedAt: existing.verified_at,
       },
     };
   }
   if (completion.kind === "challenge") {
-    const [inserted] = await sql<{ challenge_id: string; xp: number; completed_at: Date }[]>`
-      INSERT INTO challenge_completions (user_id, challenge_id, xp)
-      VALUES (${userId}, ${completion.lessonId}, ${completion.xp})
-      ON CONFLICT (user_id, challenge_id) DO NOTHING
-      RETURNING challenge_id, xp, completed_at
+    const [inserted] = await sql<
+      {
+        challenge_id: string;
+        xp: number;
+        completed_at: Date;
+        verification: "reported" | "verified";
+        verified_at: Date | null;
+      }[]
+    >`
+      INSERT INTO challenge_completions
+        (user_id, challenge_id, xp, verification, attempt_id, verified_at)
+      VALUES (${userId}, ${completion.lessonId}, ${completion.xp}, ${verificationStatus},
+              ${attemptId}, ${verification ? sql`now()` : null})
+      ON CONFLICT (user_id, challenge_id) DO UPDATE
+        SET verification = 'verified', attempt_id = EXCLUDED.attempt_id, verified_at = EXCLUDED.verified_at
+        WHERE challenge_completions.verification = 'reported' AND EXCLUDED.verification = 'verified'
+      RETURNING challenge_id, xp, completed_at, verification, verified_at
     `;
     const [existing] = inserted
       ? [inserted]
-      : await sql<{ challenge_id: string; xp: number; completed_at: Date }[]>`
-      SELECT challenge_id, xp, completed_at FROM challenge_completions
+      : await sql<
+          {
+            challenge_id: string;
+            xp: number;
+            completed_at: Date;
+            verification: "reported" | "verified";
+            verified_at: Date | null;
+          }[]
+        >`
+      SELECT challenge_id, xp, completed_at, verification, verified_at FROM challenge_completions
       WHERE user_id = ${userId} AND challenge_id = ${completion.lessonId}
     `;
 
@@ -128,21 +186,27 @@ export async function insertCompletion(
         courseId: null,
         xp: existing.xp,
         completedAt: existing.completed_at,
+        verification: existing.verification,
+        verifiedAt: existing.verified_at,
       },
     };
   }
   const [inserted] = await sql<CompletionRow[]>`
-    INSERT INTO lesson_completions (user_id, lesson_id, lesson_type, course_id, xp)
+    INSERT INTO lesson_completions
+      (user_id, lesson_id, lesson_type, course_id, xp, verification, attempt_id, verified_at)
     VALUES (
       ${userId}, ${completion.lessonId}, ${completion.lessonType},
-      ${completion.courseId}, ${completion.xp}
+      ${completion.courseId}, ${completion.xp}, ${verificationStatus}, ${attemptId},
+      ${verification ? sql`now()` : null}
     )
-    ON CONFLICT (user_id, lesson_id) DO NOTHING
-    RETURNING lesson_id, lesson_type, course_id, xp, completed_at
+    ON CONFLICT (user_id, lesson_id) DO UPDATE
+      SET verification = 'verified', attempt_id = EXCLUDED.attempt_id, verified_at = EXCLUDED.verified_at
+      WHERE lesson_completions.verification = 'reported' AND EXCLUDED.verification = 'verified'
+    RETURNING lesson_id, lesson_type, course_id, xp, completed_at, verification, verified_at
   `;
   if (inserted) return { created: true, completion: toCompletion(inserted) };
   const [existing] = await sql<CompletionRow[]>`
-    SELECT lesson_id, lesson_type, course_id, xp, completed_at
+    SELECT lesson_id, lesson_type, course_id, xp, completed_at, verification, verified_at
     FROM lesson_completions
     WHERE user_id = ${userId} AND lesson_id = ${completion.lessonId}
   `;
