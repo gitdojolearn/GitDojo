@@ -348,7 +348,10 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
       // Still only one certificate that counts.
       const duplicate = await sql`
         INSERT INTO certificates (user_id, award_key, criteria_version, recipient_name, evidence)
-        VALUES (${userId}, 'git-foundations', 1, 'Duplicate', '{}'::jsonb)
+        VALUES (
+          ${userId}, 'git-foundations', ${AWARDS["git-foundations"].criteriaVersion},
+          'Duplicate', '{}'::jsonb
+        )
       `.catch((error: unknown) => error as { code?: string });
       expect(duplicate).toMatchObject({ code: "23505" });
     });
