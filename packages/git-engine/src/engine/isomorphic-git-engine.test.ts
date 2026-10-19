@@ -386,6 +386,34 @@ describe("IsomorphicGitEngine", () => {
       });
     });
 
+    it("reports the working-tree text of clean, modified and conflicted files", async () => {
+      const { git, files, workspaceId } = await createTestWorkspace({ "README.md": README });
+      const contentOf = async (path: string) =>
+        (await git.snapshot()).entries.find((entry) => entry.path === path)?.content;
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial commit" });
+      expect(await contentOf("README.md")).toBe(README);
+
+      await files.writeFile(workspaceId, "README.md", "# Edited\n");
+      expect(await contentOf("README.md")).toBe("# Edited\n");
+      await git.add(["README.md"]);
+      expect(await contentOf("README.md")).toBe("# Edited\n");
+      await git.commit({ message: "Edit" });
+
+      await git.createAndSwitchBranch("feature");
+      await files.writeFile(workspaceId, "README.md", "# Feature\n");
+      await git.add(["README.md"]);
+      await git.commit({ message: "Feature" });
+      await git.switchBranch("main");
+      await files.writeFile(workspaceId, "README.md", "# Main\n");
+      await git.add(["README.md"]);
+      await git.commit({ message: "Main" });
+      expect((await git.merge("feature")).ok).toBe(false);
+      expect(await contentOf("README.md")).toBe(await files.readFile(workspaceId, "README.md"));
+      expect(await contentOf("README.md")).toContain("<<<<<<<");
+    });
+
     it("includes the unborn default branch", async () => {
       const { git } = await createTestWorkspace();
       await git.init();
