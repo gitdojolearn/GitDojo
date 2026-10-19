@@ -100,6 +100,27 @@ test("a lesson completed while signed in is saved to the account and loads in a 
   await fresh.context.close();
 });
 
+test("certificate name saves to the account and reloads in a fresh browser", async ({
+  page,
+  browser,
+}, info) => {
+  const { primary } = usersFor(info);
+  await signIn(page, primary, "/account#certificate-name");
+  await expect(page.getByLabel("Given name")).toHaveValue("");
+  await page.getByLabel("Given name").fill("Grace");
+  await page.getByLabel("Surname").fill("Hopper");
+  await page.getByRole("button", { name: "Save certificate name" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Certificate name saved." }),
+  ).toBeVisible();
+
+  const fresh = await freshPage(browser);
+  await signIn(fresh.page, primary, "/account#certificate-name");
+  await expect(fresh.page.getByLabel("Given name")).toHaveValue("Grace");
+  await expect(fresh.page.getByLabel("Surname")).toHaveValue("Hopper");
+  await fresh.context.close();
+});
+
 test("duplicate and concurrent completions award XP once", async ({ page, context }, info) => {
   const { primary } = usersFor(info);
   await signIn(page, primary);

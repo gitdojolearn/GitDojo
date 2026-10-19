@@ -104,8 +104,16 @@ const ISSUED = {
   verificationUrl: "https://gitdojo.example.org/verify/3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c",
 };
 
-function serve(body: unknown) {
-  const fetchMock = vi.fn(() => Promise.resolve(Response.json(body)));
+function serve(
+  body: unknown,
+  certificateName: unknown = {
+    name: { givenName: "Ada", familyName: "Lovelace" },
+    certificate: { ok: true, recipientName: "Ada Lovelace" },
+  },
+) {
+  const fetchMock = vi.fn((url: string) =>
+    Promise.resolve(Response.json(url.includes("certificate-name") ? certificateName : body)),
+  );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -235,11 +243,50 @@ describe("certification track page", () => {
     expect(screen.queryByTestId("track-get-certificate")).toBeNull();
   });
 
+  it("shows the saved certificate name and an account edit link", async () => {
+    serve(statusBody(IDS), {
+      name: { givenName: "Grace", familyName: "Hopper" },
+      certificate: { ok: true, recipientName: "Grace Hopper" },
+    });
+    signIn();
+    render(<CertificationTrack requirements={INFO} />);
+    const panel = await screen.findByTestId("track-certificate-name");
+    expect(panel).toHaveTextContent("Grace Hopper");
+    expect(within(panel).getByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      "/account#certificate-name",
+    );
+  });
+
+  it("guides learners with no usable certificate name and blocks issue until fixed", async () => {
+    serve(statusBody(IDS), {
+      name: null,
+      certificate: { ok: false, reason: "missing", characters: [] },
+    });
+    signIn();
+    render(<CertificationTrack requirements={INFO} />);
+    expect(
+      await screen.findByRole("link", { name: "Add or edit your certificate name" }),
+    ).toHaveAttribute("href", "/account#certificate-name");
+    expect(await screen.findByTestId("track-get-certificate")).toBeDisabled();
+  });
+
   it("re-reads the server when the learner comes back, so finished lessons count", async () => {
     let completed = IDS.slice(0, 3);
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => Promise.resolve(Response.json(statusBody(completed)))),
+      vi.fn((url: string) =>
+        Promise.resolve(
+          Response.json(
+            url.includes("certificate-name")
+              ? {
+                  name: { givenName: "Ada", familyName: "Lovelace" },
+                  certificate: { ok: true, recipientName: "Ada Lovelace" },
+                }
+              : statusBody(completed),
+          ),
+        ),
+      ),
     );
     signIn();
     const first = render(<CertificationTrack requirements={INFO} />);
@@ -263,7 +310,18 @@ describe("certification track page", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response("down", { status: 503 }))
-      .mockResolvedValue(Response.json(statusBody(IDS)));
+      .mockImplementation((url: string) =>
+        Promise.resolve(
+          Response.json(
+            url.includes("certificate-name")
+              ? {
+                  name: { givenName: "Ada", familyName: "Lovelace" },
+                  certificate: { ok: true, recipientName: "Ada Lovelace" },
+                }
+              : statusBody(IDS),
+          ),
+        ),
+      );
     vi.stubGlobal("fetch", fetchMock);
     signIn();
     render(<CertificationTrack requirements={INFO} />);
@@ -276,7 +334,7 @@ describe("certification track page", () => {
   it("issues once with the learner's name choice, then confirms the certificate", async () => {
     let certificates: object[] = [];
     let release: () => void = () => undefined;
-    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (init?.method === "POST") {
         return new Promise<Response>((resolve) => {
           release = () => {
@@ -285,7 +343,16 @@ describe("certification track page", () => {
           };
         });
       }
-      return Promise.resolve(Response.json(statusBody(IDS, { certificates })));
+      return Promise.resolve(
+        Response.json(
+          url.includes("certificate-name")
+            ? {
+                name: { givenName: "Ada", familyName: "Lovelace" },
+                certificate: { ok: true, recipientName: "Ada Lovelace" },
+              }
+            : statusBody(IDS, { certificates }),
+        ),
+      );
     });
     vi.stubGlobal("fetch", fetchMock);
     signIn();
@@ -332,14 +399,21 @@ describe("certification track page", () => {
   it("explains a refusal from the server and issues nothing", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn((_url: string, init?: RequestInit) =>
+      vi.fn((url: string, init?: RequestInit) =>
         Promise.resolve(
           init?.method === "POST"
             ? Response.json(
                 { error: "not_eligible", missing: ["practice:commit-one-change"] },
                 { status: 422 },
               )
-            : Response.json(statusBody(IDS)),
+            : Response.json(
+                url.includes("certificate-name")
+                  ? {
+                      name: { givenName: "Ada", familyName: "Lovelace" },
+                      certificate: { ok: true, recipientName: "Ada Lovelace" },
+                    }
+                  : statusBody(IDS),
+              ),
         ),
       ),
     );

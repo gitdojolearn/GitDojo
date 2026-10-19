@@ -17,7 +17,7 @@ snapshot even if current award definitions later change.
    Store the PEM in your deployment secrets as `GITDOJO_CREDENTIAL_PRIVATE_KEY`. Literal `\n`
    separators are accepted. Never commit the private key. Set a unique, stable
    `GITDOJO_CREDENTIAL_KEY_ID`, such as `rsa-2026-01`.
-3. Apply every migration, through `0011_verified_completions`, with
+3. Apply every migration, through `0012_verified_completions`, with
    `pnpm --filter @gitdojo/web db:migrate` before deploying the new app. The release health check
    (`/api/health`) expects the latest one and reports a database that is behind.
 4. Keep `DATABASE_URL` configured. Issuance is unavailable without the account database,
@@ -32,11 +32,19 @@ whether the learner's name may appear publicly (private by default): the PDF alw
 name, and the public page and badge show it only with consent. A signed-in learner requests
 issuance after finishing all named lessons and Practice tasks. The server reads account completion rows and inserts a
 single certificate per learner, award, and criteria version. The recipient name comes from the
-signed-in account profile; GitDojo does not verify legal identity. The name is snapshotted on
-issue. The PDF is available only to the owner.
+certificate-name fields the learner saves on `/account`; it is never copied from Asgardeo or
+accepted from an issuance request. GitDojo does not verify legal identity. The name is snapshotted
+on issue, so changing the account name does not alter an existing credential. The PDF is available
+only to the owner. A given name is required and the surname is optional.
 The learner decides at issuance whether that name appears on the public verification page and in
 badges. This choice is fixed for the issued credential, because signed and downloaded badges
 cannot be recalled or silently changed.
+
+Learners set their certificate name on the signed-in account page. The name is stored separately
+from identity-provider profile data. It may use any script, but current certificate PDFs and badge
+images cannot print all scripts: issuance reports characters outside their supported Latin-1
+range and asks the learner to save a printable version. This limitation does not change names on
+already issued certificates. Public-name consent is asked separately for each certificate.
 
 JSON columns (`public_jwk`, `evidence`, `result`) are written with `sql.json(value)`. The driver
 encodes jsonb parameters itself, so passing `JSON.stringify(value)` would store a JSON string:

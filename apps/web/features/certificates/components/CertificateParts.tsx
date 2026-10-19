@@ -27,9 +27,9 @@ export function NameConsentChoice({
         Your name on the certificate you issue
       </legend>
       <p className="text-caption text-fg-muted">
-        Your PDF always shows your account profile name. Its QR code and link open a public
-        verification page: this choice decides whether that page and the Open Badge show your name
-        too.
+        Your PDF always shows the certificate name from your account page. Its QR code and link open
+        a public verification page: this choice decides whether that page and the Open Badge show
+        your name too.
       </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <ConsentOption
@@ -48,7 +48,7 @@ export function NameConsentChoice({
             onChange(true);
           }}
           title="Show my name publicly"
-          detail="Your profile name appears on the public verification page and in the Open Badge."
+          detail="Your certificate name appears on the public verification page and in the Open Badge."
         />
       </div>
       <p className="mt-3 text-caption text-fg-muted">

@@ -88,11 +88,12 @@ and is never merged into an account.
 Signed-in learners can earn three **completion certificates** by completing their named lessons
 and Practice tasks. Each certificate has a downloadable PDF, a signed Open Badge, and a public
 verification page with its issue date and current valid or revoked status. Learners choose whether
-their name appears on the public page and badge. Current certificates require server-verified
-repository evidence for hands-on lessons and Practice tasks; concept lessons remain completion
-records. They are not proctored assessments of identity or Git proficiency. The separate
-[Git capstone](docs/assessment.md) grades a broader submitted Git history and can issue an assessed
-Git Practical Skills credential.
+their name appears on the public page and badge. They enter the name printed on certificates in
+the GitDojo account page; it is stored separately from the identity-provider profile and copied to
+each certificate when issued. Current certificates require server-verified repository evidence
+for hands-on lessons and Practice tasks; concept lessons remain completion records. These awards
+do not claim to assess identity or Git proficiency. The separate [Git capstone](docs/assessment.md)
+grades submitted Git history on the server and can issue an assessed Git Practical Skills credential.
 See [certificate details](docs/certificates.md). Deploying: [docs/deployment.md](docs/deployment.md).
 
 Every workspace has a **code editor** (Monaco) with a file explorer and Git status letters, so

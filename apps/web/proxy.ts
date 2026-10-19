@@ -61,5 +61,6 @@ export const config = {
     "/api/progress/:path*",
     "/api/certificates/:path*",
     "/api/credentials/:path*",
+    "/api/account/:path*",
   ],
 };

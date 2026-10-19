@@ -10,6 +10,7 @@ import {
   missingRequirements,
   reportedRequirements,
 } from "@/lib/certificates/awards";
+import { nameRequiredMessage } from "@/lib/certificates/certificate-name";
 import { issueCertificate, ownCertificates, ownCompletions } from "@/lib/certificates/store";
 import {
   CredentialConfigError,
@@ -118,32 +119,24 @@ export async function POST(request: Request) {
   if (!isAwardKey(awardKey) || typeof publicNameConsent !== "boolean") {
     return Response.json({ error: "invalid_body" }, { status: 400, headers: PRIVATE });
   }
-  const recipientName = auth.identity.name?.trim();
-  if (
-    !recipientName ||
-    recipientName.length < 2 ||
-    recipientName.length > 80 ||
-    /[^\x20-\x7e\xa0-\xff]/.test(recipientName)
-  ) {
-    return Response.json(
-      {
-        error: "profile_name_required",
-        message: "Add a printable name to your account profile before issuing a certificate.",
-      },
-      { status: 422, headers: PRIVATE },
-    );
-  }
+  // The recipient name is never taken from the request or the identity provider: issuance reads
+  // the learner's GitDojo certificate name itself.
   try {
     await prepareCredentialIssuer();
-    const result = await issueCertificate(
-      auth.identity,
-      awardKey,
-      recipientName,
-      publicNameConsent,
-    );
-    if (!result.eligible) {
+    const result = await issueCertificate(auth.identity, awardKey, publicNameConsent);
+    if (result.status === "not_eligible") {
       return Response.json(
         { error: "not_eligible", missing: result.missing },
+        { status: 422, headers: PRIVATE },
+      );
+    }
+    if (result.status === "name_required") {
+      return Response.json(
+        {
+          error: "name_required",
+          reason: result.reason,
+          message: nameRequiredMessage(result.reason, result.characters),
+        },
         { status: 422, headers: PRIVATE },
       );
     }

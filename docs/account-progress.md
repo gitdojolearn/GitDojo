@@ -11,6 +11,9 @@ GitDojo works exactly as before. Deployment (Vercel, Neon, releases): [deploymen
   with versioned migrations and `pnpm db:migrate`.
 - `GET /api/progress`, `POST /api/progress/lessons`, `POST /api/progress/challenges`,
   `POST /api/progress/practice` and `POST /api/progress/sync` for the signed-in learner only.
+- The separate `certificate_names` record is editable at `/account` and through
+  `GET`/`PUT /api/account/certificate-name`; it is keyed by the verified account identity and is
+  never copied from the identity-provider profile. Certificates keep an issuance-time snapshot.
 - In the browser, every field of the progress model ([What syncs](#what-syncs)) is merged with
   the account and reaches the learner's other devices.
 - `GET /api/health` reports whether the database is reachable and migrated.
@@ -235,8 +238,8 @@ createdb gitdojo
    for PostgreSQL, Neon or Supabase. Enable TLS and backups.
 2. **Roles.** Run migrations as a role that owns the schema. Run the app as a role that has only
    `SELECT, INSERT, UPDATE, DELETE` on `users`, `lesson_completions`, `challenge_completions`,
-   `practice_completions`, `command_stats`, `device_activity`, `revealed_hints`, `last_lessons`
-   and `seen_releases` (and `CONNECT` and `USAGE`).
+   `practice_completions`, `command_stats`, `device_activity`, `revealed_hints`, `last_lessons`,
+   `seen_releases` and `certificate_names` (and `CONNECT` and `USAGE`).
 3. **Set `DATABASE_URL`** as a server-side secret in your hosting platform. It's read at runtime,
    so a build doesn't need it. Never use a `NEXT_PUBLIC_` name. Require TLS in the URL:
    `postgres://user:password@host:5432/gitdojo?sslmode=verify-full` (or `sslmode=require` if your

@@ -4,6 +4,8 @@ import type { AssessmentGrade, CAPSTONE_KEY } from "@gitdojo/shared-types";
 import { getDatabase } from "@/lib/db/client";
 import type { VerifiedIdentity } from "@/lib/auth/identity";
 import { upsertUser } from "@/lib/account-progress/postgres-store";
+import { issuableName } from "./certificate-name";
+import { certificateNameFor } from "./name-store";
 import {
   AWARDS,
   criteriaNarrative,
@@ -147,15 +149,24 @@ export async function ownCertificate(
   return row ? certificate(row) : null;
 }
 
+/** What issuing a certificate came to. */
+export type IssueOutcome =
+  | { status: "issued"; certificate: Certificate }
+  | { status: "not_eligible"; missing: string[] }
+  /** No GitDojo certificate name, or one the certificate can't print yet. */
+  | { status: "name_required"; reason: "missing" | "unprintable"; characters: string[] };
+
+/**
+ * Issues a completion certificate once per learner, award and criteria version. The recipient
+ * name is read from the learner's GitDojo certificate name inside the same transaction and saved
+ * on the certificate, so later changes to that name never rewrite it. A repeat request returns
+ * the certificate already issued, whatever the name is now.
+ */
 export async function issueCertificate(
   identity: VerifiedIdentity,
   key: AwardKey,
-  recipientName: string,
   publicNameConsent: boolean,
-): Promise<
-  | { certificate: Certificate; eligible: true; missing: string[] }
-  | { certificate: null; eligible: false; missing: string[] }
-> {
+): Promise<IssueOutcome> {
   const sql = getDatabase();
   const award = AWARDS[key];
   return sql.begin(async (tx) => {
@@ -166,7 +177,7 @@ export async function issueCertificate(
       WHERE user_id = ${userId} AND award_key = ${key}
         AND criteria_version = ${award.criteriaVersion} AND NOT reissue_allowed
     `;
-    if (prior) return { certificate: certificate(prior), eligible: true, missing: [] };
+    if (prior) return { status: "issued", certificate: certificate(prior) };
 
     const lessons = await tx<{ lesson_id: string; verification: "reported" | "verified" }[]>`
       SELECT lesson_id, verification FROM lesson_completions WHERE user_id = ${userId}
@@ -184,7 +195,13 @@ export async function issueCertificate(
         practice.filter((item) => item.verification === "verified").map((item) => item.task_id),
       ),
     });
-    if (missing.length > 0) return { certificate: null, eligible: false, missing };
+    if (missing.length > 0) return { status: "not_eligible", missing };
+
+    const name = issuableName(await certificateNameFor(tx, userId));
+    if (!name.ok) {
+      return { status: "name_required", reason: name.reason, characters: name.characters ?? [] };
+    }
+    const recipientName = name.recipientName;
 
     const evidence = {
       kind: "completion" as const,
@@ -213,7 +230,7 @@ export async function issueCertificate(
       WHERE user_id = ${userId} AND award_key = ${key}
         AND criteria_version = ${award.criteriaVersion} AND NOT reissue_allowed
     `;
-    return { certificate: certificate(row), eligible: true, missing: [] };
+    return { status: "issued", certificate: certificate(row) };
   });
 }
 
