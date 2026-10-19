@@ -70,7 +70,12 @@ export function useTrackState(): TrackState {
   }
 
   const server = data.progress[CERTIFICATION_TRACK.awardKey];
-  const progress = trackProgress(server?.completed ?? [], data.lastLessonId);
+  const progress = trackProgress(
+    server?.completed ?? [],
+    data.lastLessonId,
+    CERTIFICATION_TRACK.awardKey,
+    server?.reported ?? [],
+  );
   const certificate = currentCertificate(
     data.certificates,
     CERTIFICATION_TRACK.awardKey,

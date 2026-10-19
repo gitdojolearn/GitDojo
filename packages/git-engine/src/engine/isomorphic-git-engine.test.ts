@@ -7,6 +7,64 @@ import { DEFAULT_AUTHOR } from "./git-engine";
 const README = "# GitDojo\n";
 
 describe("IsomorphicGitEngine", () => {
+  describe("completion evidence", () => {
+    it("exports the bound attempt, canonical index objects and working-tree contents", async () => {
+      const { git } = await createTestWorkspace({ "README.md": README });
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial commit" });
+      const binding = {
+        id: "11111111-1111-4111-8111-111111111111",
+        nonce: "server-created-nonce",
+        kind: "lesson" as const,
+        contentId: "git-init",
+        contentVersion: "a".repeat(64),
+      };
+      await git.bindCompletionAttempt(binding);
+      const repository = {
+        initialized: true,
+        currentBranch: "main",
+        head: (await git.snapshot()).head,
+        branches: [],
+        commits: [],
+        allCommits: [],
+        files: [],
+        stagedFiles: [],
+        conflicts: [],
+        merge: null,
+        stashes: [],
+        reflog: [],
+        tags: [],
+        remotes: [],
+        remoteBranches: [],
+        editor: null,
+      };
+
+      const evidence = await git.exportCompletionEvidence(repository);
+
+      expect(evidence).toMatchObject({
+        format: "gitdojo-completion-evidence",
+        attemptId: binding.id,
+        binding,
+      });
+      expect(evidence.workingTree).toContainEqual(
+        expect.objectContaining({
+          path: "README.md",
+          content: Buffer.from(README).toString("base64"),
+        }),
+      );
+      for (const item of evidence.objects) {
+        const bytes = Buffer.from(item.content, "base64");
+        expect(
+          createHash("sha1")
+            .update(`${item.type} ${String(bytes.length)}\0`)
+            .update(bytes)
+            .digest("hex"),
+        ).toBe(item.oid);
+      }
+    });
+  });
+
   describe("assessment evidence", () => {
     it("exports canonical objects bound to an attempt without a client grade", async () => {
       const { git } = await createTestWorkspace({ "README.md": README });

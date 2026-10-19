@@ -44,7 +44,7 @@ const FACADES = [
     // The pipeline: commands reach Git, repository state and validation only through
     // WorkspaceSession, so state, validation and progress are always recomputed together.
     modules: ["@gitdojo/git-engine", "@gitdojo/repository-state", "@gitdojo/validator"],
-    owners: ["features/workspace/services"],
+    owners: ["features/workspace/services", "lib/completion-verification"],
     allowTypeImports: true,
     // Error classes, for `instanceof` checks on what the session rejects with.
     allowImportNames: ["FileNotFoundError"],
@@ -94,6 +94,7 @@ const SCOPES = {
   lib: ["lib/**/*.ts"],
   "lib/db": ["lib/db/**/*.ts"],
   "lib/auth": ["lib/auth/**/*.ts"],
+  "lib/completion-verification": ["lib/completion-verification/**/*.ts"],
   "lib/account-progress/postgres-store": ["lib/account-progress/postgres-store.ts"],
   "lib/certificates/pdf": ["lib/certificates/pdf.ts"],
   ...Object.fromEntries(

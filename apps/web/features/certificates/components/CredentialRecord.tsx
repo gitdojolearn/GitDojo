@@ -186,6 +186,12 @@ export function CredentialRecord({
                 GitDojo checked the Git objects the holder submitted and graded the resulting
                 history on its server against the rubric above. It covers that rubric only.
               </>
+            ) : certificate.serverVerified ? (
+              <>
+                GitDojo verified the hands-on completions on its server by rebuilding the submitted
+                repository evidence and replaying the objectives above. Concept lessons remain
+                completion records. This is not identity verification or proctoring.
+              </>
             ) : (
               <>
                 It records that the holder&apos;s GitDojo account completed the lessons and Practice

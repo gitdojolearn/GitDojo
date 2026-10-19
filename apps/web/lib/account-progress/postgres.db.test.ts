@@ -66,8 +66,37 @@ function testDatabaseUrl(value: string): string {
 const resetTables = (sql: postgres.Sql) =>
   sql`DROP TABLE IF EXISTS certificate_signing_keys, certificates, assessment_attempts,
       command_stats, device_activity, revealed_hints, last_lessons,
-      seen_releases, practice_completions, challenge_completions, lesson_completions, users,
+      seen_releases, practice_completions, challenge_completions, lesson_completions,
+      completion_attempts, users,
       gitdojo_schema_migrations`;
+
+async function insertVerifiedCompletion(
+  sql: postgres.Sql,
+  userId: string,
+  completion: Parameters<typeof insertCompletion>[2],
+) {
+  const kind = completion.kind ?? "lesson";
+  const [attempt] = await sql<{ id: string }[]>`
+    INSERT INTO completion_attempts (user_id, kind, content_id, content_version, nonce)
+    VALUES (${userId}, ${kind}, ${completion.lessonId}, ${"a".repeat(64)}, ${"n".repeat(32)})
+    RETURNING id
+  `;
+  if (!attempt) throw new Error("test attempt insert failed");
+  return insertCompletion(sql, userId, {
+    ...completion,
+    verification: {
+      attemptId: attempt.id,
+      evidenceHash: "b".repeat(64),
+      objectiveResults: {
+        lessonId: completion.lessonId,
+        objectives: [{ objectiveId: "server-check", passed: true, message: "Verified" }],
+        passedCount: 1,
+        totalCount: 1,
+        completed: true,
+      },
+    },
+  });
+}
 
 describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
   let sql: postgres.Sql;
@@ -236,7 +265,7 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
       const userId = await upsertUser(sql, learner);
       const award = AWARDS["git-foundations"];
       for (const lessonId of award.lessons) {
-        await insertCompletion(sql, userId, {
+        await insertVerifiedCompletion(sql, userId, {
           lessonId,
           lessonType: "interactive",
           courseId: "git-basics",
@@ -244,7 +273,7 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         });
       }
       for (const taskId of award.practice) {
-        await insertCompletion(sql, userId, {
+        await insertVerifiedCompletion(sql, userId, {
           kind: "practice",
           lessonId: taskId,
           lessonType: "challenge",
@@ -271,7 +300,7 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
       const userId = await upsertUser(sql, learner);
       const award = AWARDS["git-foundations"];
       for (const lessonId of award.lessons) {
-        await insertCompletion(sql, userId, {
+        await insertVerifiedCompletion(sql, userId, {
           lessonId,
           lessonType: "interactive",
           courseId: "git-basics",
@@ -279,7 +308,7 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         });
       }
       for (const taskId of award.practice) {
-        await insertCompletion(sql, userId, {
+        await insertVerifiedCompletion(sql, userId, {
           kind: "practice",
           lessonId: taskId,
           lessonType: "challenge",
@@ -360,6 +389,71 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         SELECT evidence FROM certificates WHERE id = ${cert?.id ?? ""}
       `;
       expect(evidence?.evidence.title).toBe("T");
+    });
+  });
+
+  describe("verified completion attempts", () => {
+    it("uses one attempt transactionally, permits identical retries and rejects reuse", async () => {
+      const learner = identity("verified-attempt");
+      const userId = await upsertUser(sql, learner);
+      const [attempt] = await sql<{ id: string }[]>`
+        INSERT INTO completion_attempts (user_id, kind, content_id, content_version, nonce)
+        VALUES (${userId}, 'lesson', 'git-init', ${"a".repeat(64)}, ${"n".repeat(32)})
+        RETURNING id
+      `;
+      if (!attempt) throw new Error("attempt insert failed");
+      const verification = {
+        attemptId: attempt.id,
+        evidenceHash: "b".repeat(64),
+        objectiveResults: {
+          lessonId: "git-init",
+          objectives: [{ objectiveId: "initialize", passed: true, message: "Verified" }],
+          passedCount: 1,
+          totalCount: 1,
+          completed: true,
+        },
+      };
+      const completion = {
+        lessonId: "git-init",
+        lessonType: "interactive" as const,
+        courseId: "git-basics",
+        xp: 50,
+        verification,
+      };
+      const store = createPostgresProgressStore(sql);
+
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () => store.recordCompletion(learner, completion)),
+      );
+      expect(results.filter((result) => result.created)).toHaveLength(1);
+      expect(new Set(results.map((result) => result.completion.completedAt.getTime())).size).toBe(
+        1,
+      );
+
+      const retry = await store.recordCompletion(learner, completion);
+      expect(retry.created).toBe(false);
+      await expect(
+        store.recordCompletion(learner, {
+          ...completion,
+          verification: { ...verification, evidenceHash: "c".repeat(64) },
+        }),
+      ).rejects.toThrow("completion attempt is unavailable");
+      await expect(
+        store.recordCompletion(identity("other-attempt-owner"), completion),
+      ).rejects.toThrow("completion attempt is unavailable");
+
+      const [row] = await sql<
+        {
+          used: boolean;
+          evidence_hash: string;
+          result_type: string;
+        }[]
+      >`
+        SELECT used_at IS NOT NULL AS used, evidence_hash,
+               jsonb_typeof(objective_results) AS result_type
+        FROM completion_attempts WHERE id = ${attempt.id}
+      `;
+      expect(row).toEqual({ used: true, evidence_hash: "b".repeat(64), result_type: "object" });
     });
   });
 

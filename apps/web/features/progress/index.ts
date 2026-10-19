@@ -4,6 +4,7 @@ export { ProgressManagement } from "./components/ProgressManagement";
 export { XpAward } from "./components/XpAward";
 export { useLessonProgress } from "./hooks/use-lesson-progress";
 export { recordCommand } from "./services/record-command";
+export { startCompletionAttempt } from "./services/completion-verification";
 export {
   initProgress,
   recordCompletion,

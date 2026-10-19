@@ -96,7 +96,7 @@ function statusBody(
 const ISSUED = {
   id: "3f2b8c1e-9a4d-4e7b-8c2a-1d5e6f7a8b9c",
   awardKey: "git-foundations",
-  criteriaVersion: 1,
+  criteriaVersion: 2,
   recipientName: "Ada Lovelace",
   issuedAt: "2026-10-18T10:00:00.000Z",
   revoked: false,

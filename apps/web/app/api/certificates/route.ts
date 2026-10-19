@@ -8,6 +8,7 @@ import {
   criteriaNarrative,
   isAwardKey,
   missingRequirements,
+  reportedRequirements,
 } from "@/lib/certificates/awards";
 import { issueCertificate, ownCertificates, ownCompletions } from "@/lib/certificates/store";
 import {
@@ -68,6 +69,7 @@ export async function GET() {
             key,
             {
               completed: completedRequirements(key, done),
+              reported: reportedRequirements(key, done),
               missing: missingRequirements(key, done),
             },
           ]),

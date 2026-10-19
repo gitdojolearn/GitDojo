@@ -44,7 +44,7 @@ export const TRACK_CERTIFICATE_TITLE = `${TRACK_AWARD.title} completion certific
  *   counts as started: there is no evidence of partial work on other items.
  * - `not-started`: everything else.
  */
-export type RequirementStatus = "not-started" | "in-progress" | "complete";
+export type RequirementStatus = "not-started" | "in-progress" | "reported" | "complete";
 
 export interface TrackItem {
   requirement: AwardRequirement;
@@ -71,14 +71,18 @@ export function trackProgress(
   completedIds: readonly string[],
   lastLessonId: string | null = null,
   key: AwardKey = CERTIFICATION_TRACK.awardKey,
+  reportedIds: readonly string[] = [],
 ): TrackProgress {
   const done = new Set(completedIds);
+  const reported = new Set(reportedIds);
   const items = awardRequirements(key).map((requirement): TrackItem => {
     const status: RequirementStatus = done.has(requirement.id)
       ? "complete"
-      : requirement.kind === "lesson" && requirement.contentId === lastLessonId
-        ? "in-progress"
-        : "not-started";
+      : reported.has(requirement.id)
+        ? "reported"
+        : requirement.kind === "lesson" && requirement.contentId === lastLessonId
+          ? "in-progress"
+          : "not-started";
     return { requirement, status };
   });
   const completed = items.filter((item) => item.status === "complete").length;

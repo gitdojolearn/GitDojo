@@ -7,6 +7,7 @@ import {
   type RemoteCounters,
 } from "@gitdojo/progress";
 import { type LessonType } from "@gitdojo/shared-types";
+import { type CompletionEvidence } from "@gitdojo/shared-types";
 
 /** Lesson completions saved to the learner's account, keyed by lesson id. */
 export type AccountLessons = Record<string, CompletionRecord>;
@@ -300,6 +301,7 @@ export async function uploadLessonCompletion(
   lessonId: string,
   fetcher: typeof fetch = fetch,
   kind: CompletionUploadKind = "lesson",
+  evidence?: CompletionEvidence,
 ): Promise<LessonUploadResult> {
   try {
     const endpoint = UPLOAD_ENDPOINTS[kind];
@@ -307,7 +309,7 @@ export async function uploadLessonCompletion(
       ...REQUEST,
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [endpoint.field]: lessonId }),
+      body: JSON.stringify({ [endpoint.field]: lessonId, ...(evidence ? { evidence } : {}) }),
     });
     if (response.status === 401) return { status: "signed-out" };
     if (response.status >= 500 || response.status === 429) return { status: "unavailable" };

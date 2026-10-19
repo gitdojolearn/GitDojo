@@ -109,12 +109,12 @@ export async function ownCompletions(
 ): Promise<{ done: CompletionSets; lastLessonId: string | null }> {
   // Sequential on purpose: one connection, and each query is small.
   const sql = getDatabase();
-  const lessons = await sql<{ lesson_id: string }[]>`
-    SELECT c.lesson_id FROM lesson_completions c JOIN users u ON u.id = c.user_id
+  const lessons = await sql<{ lesson_id: string; verification: "reported" | "verified" }[]>`
+    SELECT c.lesson_id, c.verification FROM lesson_completions c JOIN users u ON u.id = c.user_id
     WHERE u.issuer = ${identity.issuer} AND u.subject = ${identity.subject}
   `;
-  const practice = await sql<{ task_id: string }[]>`
-    SELECT c.task_id FROM practice_completions c JOIN users u ON u.id = c.user_id
+  const practice = await sql<{ task_id: string; verification: "reported" | "verified" }[]>`
+    SELECT c.task_id, c.verification FROM practice_completions c JOIN users u ON u.id = c.user_id
     WHERE u.issuer = ${identity.issuer} AND u.subject = ${identity.subject}
   `;
   const [last] = await sql<{ lesson_id: string }[]>`
@@ -125,6 +125,12 @@ export async function ownCompletions(
     done: {
       lessons: new Set(lessons.map((row) => row.lesson_id)),
       practice: new Set(practice.map((row) => row.task_id)),
+      verifiedLessons: new Set(
+        lessons.filter((row) => row.verification === "verified").map((row) => row.lesson_id),
+      ),
+      verifiedPractice: new Set(
+        practice.filter((row) => row.verification === "verified").map((row) => row.task_id),
+      ),
     },
     lastLessonId: last?.lesson_id ?? null,
   };
@@ -162,15 +168,21 @@ export async function issueCertificate(
     `;
     if (prior) return { certificate: certificate(prior), eligible: true, missing: [] };
 
-    const lessons = await tx<{ lesson_id: string }[]>`
-      SELECT lesson_id FROM lesson_completions WHERE user_id = ${userId}
+    const lessons = await tx<{ lesson_id: string; verification: "reported" | "verified" }[]>`
+      SELECT lesson_id, verification FROM lesson_completions WHERE user_id = ${userId}
     `;
-    const practice = await tx<{ task_id: string }[]>`
-      SELECT task_id FROM practice_completions WHERE user_id = ${userId}
+    const practice = await tx<{ task_id: string; verification: "reported" | "verified" }[]>`
+      SELECT task_id, verification FROM practice_completions WHERE user_id = ${userId}
     `;
     const missing = missingRequirements(key, {
       lessons: new Set(lessons.map((item) => item.lesson_id)),
       practice: new Set(practice.map((item) => item.task_id)),
+      verifiedLessons: new Set(
+        lessons.filter((item) => item.verification === "verified").map((item) => item.lesson_id),
+      ),
+      verifiedPractice: new Set(
+        practice.filter((item) => item.verification === "verified").map((item) => item.task_id),
+      ),
     });
     if (missing.length > 0) return { certificate: null, eligible: false, missing };
 

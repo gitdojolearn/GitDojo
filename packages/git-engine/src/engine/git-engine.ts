@@ -1,8 +1,11 @@
 import {
   type AssessmentEvidence,
   type BranchState,
+  type CompletionAttemptBinding,
+  type CompletionEvidence,
   type GitAuthor,
   type GitCommandResult,
+  type RepositoryState,
   type StagedChange,
 } from "@gitdojo/shared-types";
 
@@ -611,6 +614,10 @@ export interface GitEngine {
   snapshot(): Promise<GitRepositorySnapshot>;
   /** Canonical Git objects used by the server-only capstone grader. */
   exportAssessmentEvidence(attemptId: string): Promise<AssessmentEvidence>;
+  /** Stores the server-issued binding in Git's private metadata for this workspace. */
+  bindCompletionAttempt(binding: CompletionAttemptBinding): Promise<void>;
+  /** Canonical evidence used to replay lesson objectives on the server. */
+  exportCompletionEvidence(state: RepositoryState): Promise<CompletionEvidence>;
 }
 
 export type GitEngineFactory = (workspaceId: string) => GitEngine;

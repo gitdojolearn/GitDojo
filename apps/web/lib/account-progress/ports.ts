@@ -26,6 +26,14 @@ export interface StoredCompletion {
   xp: number;
   /** The first completion. */
   completedAt: Date;
+  verification?: "reported" | "verified";
+  verifiedAt?: Date | null;
+}
+
+export interface NewCompletionVerification {
+  attemptId: string;
+  evidenceHash: string;
+  objectiveResults: unknown;
 }
 
 /** A completion to record. Everything here is computed by the server from the content catalog. */
@@ -35,6 +43,7 @@ export interface NewCompletion {
   lessonType: LessonType;
   courseId: string | null;
   xp: number;
+  verification?: NewCompletionVerification;
 }
 
 /** One Git subcommand's usage, summed over the devices a read asked for. */

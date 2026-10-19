@@ -21,7 +21,9 @@ export interface IssuedCertificate {
 export interface CertificationStatus {
   certificates: IssuedCertificate[];
   /** Per award: requirement IDs complete and missing, by the rule issuance applies. */
-  progress: Partial<Record<AwardKey, { completed: string[]; missing: string[] }>>;
+  progress: Partial<
+    Record<AwardKey, { completed: string[]; reported?: string[]; missing: string[] }>
+  >;
   lastLessonId: string | null;
   checkedAt: string | null;
 }

@@ -1,6 +1,11 @@
 import { indexLessons, type ProgressCatalog } from "@gitdojo/progress";
 import { type VerifiedIdentity } from "@/lib/auth/identity";
+import { type CompletionEvidence } from "@gitdojo/shared-types";
 import { DatabaseNotConfiguredError } from "@/lib/db/client";
+import { getDatabase } from "@/lib/db/client";
+import { loadCompletionContent } from "@/lib/completion-verification/content";
+import { verifyCompletionEvidence } from "@/lib/completion-verification/evidence";
+import { ownedCompletionAttempt } from "@/lib/completion-verification/store";
 import { isSameOriginRequest } from "@/lib/http/same-origin";
 import {
   parseDeviceActivity,
@@ -32,6 +37,8 @@ export interface CompletedLesson {
   course: { id: string; slug: string; title: string } | null;
   xp: number;
   completedAt: string;
+  verification: "reported" | "verified";
+  verifiedAt: string | null;
 }
 
 export interface ProgressResponse {
@@ -52,6 +59,8 @@ export interface CompletedChallenge {
   title: string | null;
   xp: number;
   completedAt: string;
+  verification: "reported" | "verified";
+  verifiedAt: string | null;
 }
 
 export interface CompletedPractice {
@@ -59,6 +68,8 @@ export interface CompletedPractice {
   /** Null when the task no longer exists in the content. */
   title: string | null;
   completedAt: string;
+  verification: "reported" | "verified";
+  verifiedAt: string | null;
 }
 
 export interface RecordPracticeResponse {
@@ -94,7 +105,7 @@ function deviceParam(request: Request | undefined): string | undefined {
 /** Lesson ids are content slugs (`git-init`), as the lesson schema requires. */
 const LESSON_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_LESSON_ID_LENGTH = 100;
-const MAX_BODY_BYTES = 1024;
+const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
 // Private, per-learner data: never stored by browsers or shared caches.
 const PRIVATE_HEADERS = { "Cache-Control": "private, no-store" };
@@ -145,6 +156,8 @@ function present(
     course: lesson?.course ?? null,
     xp: completion.xp,
     completedAt: completion.completedAt.toISOString(),
+    verification: completion.verification ?? "reported",
+    verifiedAt: completion.verifiedAt?.toISOString() ?? null,
   };
 }
 
@@ -157,6 +170,8 @@ function presentChallenge(
     title: catalog.challenges.find((item) => item.id === completion.lessonId)?.title ?? null,
     xp: completion.xp,
     completedAt: completion.completedAt.toISOString(),
+    verification: completion.verification ?? "reported",
+    verifiedAt: completion.verifiedAt?.toISOString() ?? null,
   };
 }
 
@@ -168,6 +183,8 @@ function presentPractice(
     taskId: completion.lessonId,
     title: catalog.practice.find((item) => item.id === completion.lessonId)?.title ?? null,
     completedAt: completion.completedAt.toISOString(),
+    verification: completion.verification ?? "reported",
+    verifiedAt: completion.verifiedAt?.toISOString() ?? null,
   };
 }
 
@@ -247,7 +264,7 @@ async function readBody(request: Request, limit: number): Promise<string | null>
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
-type ParsedBody = { ok: true; id: string } | { ok: false; response: Response };
+type ParsedBody = { ok: true; id: string; evidence?: unknown } | { ok: false; response: Response };
 
 /** The content id from a record request's body: exactly `{ [field]: "<content-id>" }`. */
 type RecordField = "lessonId" | "challengeId" | "taskId";
@@ -280,7 +297,11 @@ async function parseRecordBody(request: Request, field: RecordField): Promise<Pa
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
     return invalid(400, "invalid_body", "Send a JSON object with the content id.");
   }
-  const unexpected = Object.keys(body).filter((key) => key !== field);
+  const evidence = (body as Record<string, unknown>).evidence;
+  if (evidence === undefined && new TextEncoder().encode(text).byteLength > 1_024) {
+    return invalid(413, "payload_too_large", "The request body is too large.");
+  }
+  const unexpected = Object.keys(body).filter((key) => key !== field && key !== "evidence");
   if (unexpected.length > 0) {
     return invalid(
       400,
@@ -292,7 +313,10 @@ async function parseRecordBody(request: Request, field: RecordField): Promise<Pa
   if (typeof id !== "string" || id.length > MAX_LESSON_ID_LENGTH || !LESSON_ID.test(id)) {
     return invalid(400, INVALID_ID_CODES[field], `${field} must be a content id such as git-init.`);
   }
-  return { ok: true, id };
+  if (evidence !== undefined && (typeof evidence !== "object" || evidence === null)) {
+    return invalid(400, "invalid_evidence", "Evidence must be a repository evidence object.");
+  }
+  return { ok: true, id, ...(evidence === undefined ? {} : { evidence }) };
 }
 
 type Recorded = Extract<RecordOutcome, { status: "recorded" }>;
@@ -353,7 +377,35 @@ async function recordCompletionRequest(
   if (!parsed.ok) return parsed.response;
 
   try {
-    const outcome = await recordCompletion(deps, verified.identity, kind, parsed.id);
+    let verification;
+    if (parsed.evidence !== undefined) {
+      const content = await loadCompletionContent(kind, parsed.id);
+      if (!content) return error(422, endpoint.unknown.code, endpoint.unknown.message);
+      const attempt = await ownedCompletionAttempt(
+        getDatabase(),
+        verified.identity,
+        parsed.evidence as CompletionEvidence,
+      );
+      if (
+        !attempt ||
+        attempt.kind !== kind ||
+        attempt.contentId !== parsed.id ||
+        attempt.contentVersion !== content.version
+      ) {
+        return error(422, "invalid_evidence", "The evidence does not belong to this completion.");
+      }
+      try {
+        const checked = await verifyCompletionEvidence(parsed.evidence, attempt, content.lesson);
+        verification = {
+          attemptId: attempt.id,
+          evidenceHash: checked.evidenceHash,
+          objectiveResults: checked.result,
+        };
+      } catch {
+        return error(422, "invalid_evidence", "The repository evidence could not be verified.");
+      }
+    }
+    const outcome = await recordCompletion(deps, verified.identity, kind, parsed.id, verification);
     if (outcome.status === "unknown") {
       return error(422, endpoint.unknown.code, endpoint.unknown.message);
     }
@@ -368,8 +420,8 @@ async function recordCompletionRequest(
  * completed a lesson. Idempotent: 201 the first time, 200 with `alreadyCompleted` afterwards,
  * and XP is only ever awarded once. XP, type and course come from the content catalog.
  *
- * This is learner-reported progress: the server checks that the lesson exists, not that its
- * exercises were solved.
+ * Without evidence this remains learner-reported progress. Valid attempt-bound evidence upgrades
+ * the row to verified after the server replays the lesson objectives.
  */
 export function recordLessonCompletion(request: Request, deps: ProgressApiDeps): Promise<Response> {
   return recordCompletionRequest("lesson", request, deps);

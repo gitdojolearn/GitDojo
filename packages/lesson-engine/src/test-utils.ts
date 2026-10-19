@@ -50,6 +50,8 @@ export interface PlayResult {
   progress: LessonProgress;
   /** Repository state after setup and after each step, so checks can run at every point. */
   states: RepositoryState[];
+  environment: LessonEnvironment;
+  workspaceId: string;
 }
 
 /**
@@ -91,5 +93,7 @@ export async function play(lesson: LessonDefinition, steps: PlayStep[]): Promise
     states.push(repository);
     progress = advanceProgress(lesson, progress, await validateLesson(lesson, { repository }));
   }
-  return { initial, progress, states };
+  return { initial, progress, states, environment: env, workspaceId };
 }
+
+export { LESSON_REFERENCE_SOLUTIONS } from "./reference-solutions";

@@ -5,7 +5,8 @@
   "description": "Challenge schema, loader and catalog for GitDojo's challenge mode.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/reference-solutions.ts"
   },
   "scripts": {
     "lint": "eslint .",

@@ -114,6 +114,11 @@ export default async function CertificationPage() {
                 &ldquo;Name withheld by learner&rdquo;. The choice is fixed once issued. Your email
                 address and account ID never appear.
               </p>
+              <p className="mt-2">
+                For hands-on work, your repository evidence is checked in memory and then discarded.
+                GitDojo stores only its SHA-256 digest, the objective results, the server attempt ID
+                and when verification succeeded; learner-typed file contents are not retained.
+              </p>
             </AboutSection>
 
             <AboutSection id="criteria" icon={FileCheck} title="Criteria version">

@@ -1,13 +1,14 @@
 "use client";
 
 import { type CommandExecutionResult } from "@gitdojo/command-parser";
-import { type AssessmentEvidence } from "@gitdojo/shared-types";
+import { type AssessmentEvidence, type CompletionEvidence } from "@gitdojo/shared-types";
 import { type LessonEnvironment } from "@gitdojo/lesson-engine";
 import { type LessonDefinition } from "@gitdojo/shared-types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type WorkspaceFileActions } from "@/features/editor";
 import { explainOutcome, useExplanationStore } from "@/features/errors";
 import { recordCommand } from "@/features/progress";
+import { startCompletionAttempt } from "@/features/progress";
 import { useRepositoryStore } from "@/features/repository";
 import { createBrowserLessonEnvironment } from "../services/browser-environment";
 import { settleEditor } from "../services/git-editor";
@@ -25,6 +26,7 @@ export interface PracticeSessionControls {
   reset: () => Promise<void>;
   retry: () => void;
   exportEvidence: (attemptId: string) => Promise<AssessmentEvidence>;
+  exportCompletionEvidence: () => Promise<CompletionEvidence | null>;
 }
 
 function describe(error: unknown): string {
@@ -36,7 +38,8 @@ export function usePracticeSession(
   task: LessonDefinition,
   {
     createEnvironment = createBrowserLessonEnvironment,
-  }: { createEnvironment?: () => LessonEnvironment } = {},
+    completionKind,
+  }: { createEnvironment?: () => LessonEnvironment; completionKind?: "practice" } = {},
 ): PracticeSessionControls {
   const sessionRef = useRef<PracticeSession | null>(null);
   const taskRef = useRef(task);
@@ -58,15 +61,28 @@ export function usePracticeSession(
 
   useEffect(() => {
     let cancelled = false;
-    if (sessionRef.current?.taskId !== taskId) {
-      sessionRef.current = new PracticeSession(taskRef.current, environmentRef.current());
-    }
-    const session = sessionRef.current;
-    useRepositoryStore.getState().setWorkspace(session.workspaceId);
+    let session: PracticeSession | null = null;
     useExplanationStore.getState().dismiss();
-    session.start().then(
+    const initialize = async () => {
+      const binding = completionKind ? await startCompletionAttempt(completionKind, taskId) : null;
+      if (cancelled) return null;
+      if (
+        sessionRef.current?.taskId !== taskId ||
+        sessionRef.current.completionAttemptId !== (binding?.id ?? null)
+      ) {
+        sessionRef.current = new PracticeSession(
+          taskRef.current,
+          environmentRef.current(),
+          binding,
+        );
+      }
+      session = sessionRef.current;
+      useRepositoryStore.getState().setWorkspace(session.workspaceId);
+      return session.start();
+    };
+    initialize().then(
       (started) => {
-        if (cancelled) return;
+        if (cancelled || started === null) return;
         publish(started);
         setStatus("ready");
       },
@@ -81,7 +97,7 @@ export function usePracticeSession(
     return () => {
       cancelled = true;
     };
-  }, [taskId, attempt, publish]);
+  }, [taskId, completionKind, attempt, publish]);
 
   const execute = useCallback(
     async (input: string): Promise<CommandExecutionResult> => {
@@ -152,8 +168,23 @@ export function usePracticeSession(
   const exportEvidence = useCallback((attemptId: string) => {
     const session = sessionRef.current;
     if (!session) return Promise.reject(new Error("The workspace is still loading."));
-    return session.exportEvidence(attemptId);
+    return session.exportAssessmentEvidence(attemptId);
   }, []);
 
-  return { status, errorDetails, snapshot, execute, files, reset, retry, exportEvidence };
+  const exportCompletionEvidence = useCallback(() => {
+    const session = sessionRef.current;
+    return session ? session.exportCompletionEvidence() : Promise.resolve(null);
+  }, []);
+
+  return {
+    status,
+    errorDetails,
+    snapshot,
+    execute,
+    files,
+    reset,
+    retry,
+    exportEvidence,
+    exportCompletionEvidence,
+  };
 }

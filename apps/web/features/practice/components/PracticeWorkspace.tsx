@@ -63,8 +63,8 @@ export function PracticeWorkspace({
   tasks,
   related,
 }: PracticeWorkspaceProps) {
-  const { status, errorDetails, snapshot, execute, files, reset, retry } =
-    usePracticeSession(lesson);
+  const { status, errorDetails, snapshot, execute, files, reset, retry, exportCompletionEvidence } =
+    usePracticeSession(lesson, { completionKind: "practice" });
   const terminalRef = useRef<TerminalHandle>(null);
   const executor = useMemo(() => createTerminalExecutor(execute), [execute]);
   const [tab, setTab] = useState<PracticeTab>("task");
@@ -82,8 +82,11 @@ export function PracticeWorkspace({
   useEffect(() => {
     if (!solved || recorded.current) return;
     recorded.current = true;
-    void recordCompletion({ kind: "practice", id: task.id });
-  }, [solved, task.id]);
+    void (async () => {
+      const evidence = await exportCompletionEvidence().catch(() => null);
+      await recordCompletion({ kind: "practice", id: task.id }, evidence ?? undefined);
+    })();
+  }, [solved, task.id, exportCompletionEvidence]);
 
   const startOver = useCallback(async () => {
     useConflictEditorStore.getState().close();

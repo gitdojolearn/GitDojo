@@ -1,6 +1,7 @@
 import { resetLesson, setupLesson, type LessonEnvironment } from "@gitdojo/lesson-engine";
 import {
-  type AssessmentEvidence,
+  type CompletionAttemptBinding,
+  type CompletionEvidence,
   type LessonDefinition,
   type LessonValidationResult,
   type RepositoryState,
@@ -32,21 +33,25 @@ export function workspaceIdForPractice(taskId: string): string {
  */
 export class PracticeSession extends WorkspaceSession<PracticeSnapshot> {
   readonly taskId: string;
+  readonly completionAttemptId: string | null;
   private started: Promise<unknown> | null = null;
   private latest: PracticeSnapshot | null = null;
 
   constructor(
     private readonly task: LessonDefinition,
     env: LessonEnvironment,
+    private readonly completionAttempt: CompletionAttemptBinding | null = null,
   ) {
     super(workspaceIdForPractice(task.id), env);
     this.taskId = task.id;
+    this.completionAttemptId = completionAttempt?.id ?? null;
   }
 
   async start(): Promise<PracticeSnapshot> {
-    this.started ??= this.enqueue(async () =>
-      this.evaluate(await setupLesson(this.task, this.workspaceId, this.env)),
-    );
+    this.started ??= this.enqueue(async () => {
+      const repository = await setupLesson(this.task, this.workspaceId, this.env);
+      return this.evaluate(repository);
+    });
     await this.started;
     return this.enqueue(() => {
       if (!this.latest) throw new Error("Practice session has not been set up");
@@ -56,20 +61,39 @@ export class PracticeSession extends WorkspaceSession<PracticeSnapshot> {
 
   /** Back to the task's starting state, for another try. */
   reset(): Promise<PracticeSnapshot> {
-    return this.enqueue(async () =>
-      this.evaluate(await resetLesson(this.task, this.workspaceId, this.env)),
-    );
+    return this.enqueue(async () => {
+      const repository = await resetLesson(this.task, this.workspaceId, this.env);
+      return this.evaluate(repository);
+    });
   }
 
-  exportEvidence(attemptId: string): Promise<AssessmentEvidence> {
+  exportCompletionEvidence(): Promise<CompletionEvidence | null> {
+    return this.enqueue(async () => {
+      if (!this.completionAttempt) return null;
+      const repository = this.requireLatest().repository;
+      if (!repository.initialized) return null;
+      const git = this.env.gitFor(this.workspaceId);
+      await git.bindCompletionAttempt(this.completionAttempt);
+      return git.exportCompletionEvidence(repository);
+    });
+  }
+
+  exportAssessmentEvidence(attemptId: string) {
     return this.enqueue(() =>
       this.env.gitFor(this.workspaceId).exportAssessmentEvidence(attemptId),
     );
   }
 
   protected async evaluate(repository: RepositoryState): Promise<PracticeSnapshot> {
+    if (this.completionAttempt && repository.initialized)
+      await this.env.gitFor(this.workspaceId).bindCompletionAttempt(this.completionAttempt);
     const validation = await validateLesson(this.task, { repository });
     this.latest = { repository, validation, solved: validation.completed };
+    return this.latest;
+  }
+
+  private requireLatest(): PracticeSnapshot {
+    if (!this.latest) throw new Error("Practice session has not been set up");
     return this.latest;
   }
 }
