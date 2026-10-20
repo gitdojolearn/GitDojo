@@ -13,6 +13,7 @@ import { THEME_COLORS } from "@/features/theme/services/theme";
 import { THEME_SCRIPT } from "@/features/theme/services/theme-script";
 import { loadProgressCatalog } from "@/lib/progress-catalog";
 import { SITE } from "@/lib/site";
+import { SPLASH_SCRIPT } from "@/components/landing/splash-script";
 
 export const metadata: Metadata = {
   // Absolute base for social preview images (app/opengraph-image.png). Set in deployment.
@@ -38,6 +39,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Decides before the first paint whether the landing page opens with its intro. */}
+        <script dangerouslySetInnerHTML={{ __html: SPLASH_SCRIPT }} />
       </head>
       <body className="min-h-dvh bg-app text-fg">
         <ThemeSync />

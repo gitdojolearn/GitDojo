@@ -2,6 +2,7 @@
 
 import { cn } from "@gitdojo/ui";
 import { Fragment, type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { SPLASH_ATTRIBUTE } from "./splash-script";
 
 export type DemoArea = "working" | "staging" | "repository";
 
@@ -190,23 +191,33 @@ export function DemoPlayer({
   const finished = done === steps.length;
   const running = playing && !finished;
 
-  // Autoplay once, the first time most of the demo is on screen.
+  // Autoplay once, the first time most of the demo is on screen, and never behind the
+  // first-visit intro: if it is showing, wait until it has gone.
   useEffect(() => {
     const element = root.current;
     if (reduced || started.current || !element) return;
+    const html = document.documentElement;
+    let intro: MutationObserver | undefined;
+    const start = () => {
+      if (started.current || html.hasAttribute(SPLASH_ATTRIBUTE)) return;
+      started.current = true;
+      intro?.disconnect();
+      setPlaying(true);
+    };
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting) && !started.current) {
-          started.current = true;
-          setPlaying(true);
-          observer.disconnect();
-        }
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        intro = new MutationObserver(start);
+        intro.observe(html, { attributes: true, attributeFilter: [SPLASH_ATTRIBUTE] });
+        start();
       },
       { threshold: 0.5 },
     );
     observer.observe(element);
     return () => {
       observer.disconnect();
+      intro?.disconnect();
     };
   }, [reduced]);
 

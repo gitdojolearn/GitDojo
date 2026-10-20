@@ -1,0 +1,362 @@
+/*
+ * First-visit intro (splash.tsx). Hidden unless SPLASH_SCRIPT put data-splash on <html> before
+ * the first paint. Without any animation the overlay shows its finished frame (the mark and the
+ * wordmark): that is the reduced-motion ("static") version. "play" adds the sequence below.
+ *
+ * Timeline (ms)
+ *    0 –  900  light comes up
+ *  120 – 1200  commits pop in; main and the branch draw; the branch merges back (1160)
+ * 1400 – 2050  lines fade, the graph settles and its commits travel onto the mark's nodes
+ * 1560 – 2010  the mark resolves under them
+ * 1780 – 2350  wordmark and tagline rise in
+ * 2350 – 2850  the scene lifts away first, then the backdrop, as the hero rises into place
+ *              (2480 – 3210)
+ *
+ * Only opacity, transform and a stroke offset are animated, so nothing reflows. The overlay is
+ * fixed, so neither it appearing nor it leaving moves the page (no layout shift).
+ */
+
+.gd-splash {
+  display: none;
+}
+
+html[data-splash] .gd-splash {
+  --stage: min(58vw, 300px);
+  /* How much bigger the graph is drawn before it settles into the mark; less on phones. */
+  --graph-scale: 1.3;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+.gd-splash-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 50% 40%,
+      color-mix(in srgb, var(--accent-primary) 20%, transparent) 0,
+      transparent 34%
+    ),
+    radial-gradient(ellipse at 50% 42%, var(--accent-glow) 0, transparent 70%),
+    radial-gradient(
+      ellipse at 50% 50%,
+      transparent 55%,
+      color-mix(in srgb, var(--shade) 40%, transparent) 100%
+    );
+}
+
+.gd-splash-scene {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 16px;
+  text-align: center;
+}
+
+.gd-splash-stage {
+  position: relative;
+  width: var(--stage);
+  aspect-ratio: 1;
+}
+
+.gd-splash-floor {
+  position: absolute;
+  inset: auto 12% -12%;
+  height: 20%;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, var(--accent-primary) 28%, transparent) 0,
+    transparent 70%
+  );
+}
+
+.gd-splash-mark {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.gd-splash-graph {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 50%;
+}
+
+.gd-splash-word {
+  margin-top: 28px;
+  color: var(--text-primary);
+  font-size: clamp(38px, 10vw, 52px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.gd-splash-word span {
+  color: var(--accent-primary);
+}
+
+.gd-splash-tagline {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.gd-splash-skip {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+}
+
+.gd-splash-pop,
+.gd-splash-node,
+.gd-splash-halo,
+.gd-splash-flash {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.gd-splash-halo,
+.gd-splash-flash {
+  opacity: 0;
+}
+
+/* ---- The sequence. "skip" keeps it running underneath while the overlay fades out. ---- */
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-graph {
+  display: block;
+  animation: gd-splash-settle 650ms cubic-bezier(0.65, 0, 0.35, 1) 1400ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-light {
+  animation:
+    gd-splash-fade-in 900ms ease-out both,
+    gd-splash-glow 700ms ease-in-out 1450ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-line {
+  stroke-dasharray: 1;
+  animation: gd-splash-draw var(--len) cubic-bezier(0.4, 0, 0.2, 1) var(--at) both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-lines {
+  animation: gd-splash-fade-out 300ms ease-in 1400ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-pop {
+  animation: gd-splash-pop 420ms ease-out var(--at) both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-halo {
+  animation: gd-splash-halo 700ms ease-out var(--at) both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-flash {
+  animation: gd-splash-flash 480ms ease-out 1160ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-node {
+  animation: gd-splash-resolve 650ms cubic-bezier(0.65, 0, 0.35, 1) 1400ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-node[data-dissolve] {
+  animation-name: gd-splash-dissolve;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-mark {
+  animation: gd-splash-mark-in 450ms cubic-bezier(0.2, 0.8, 0.2, 1) 1560ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-floor {
+  animation: gd-splash-fade-in 500ms ease-out 1560ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-word {
+  animation: gd-splash-rise 450ms cubic-bezier(0.2, 0.8, 0.2, 1) 1780ms both;
+}
+
+html:is([data-splash="play"], [data-splash="skip"]) .gd-splash-tagline {
+  animation: gd-splash-rise 450ms cubic-bezier(0.2, 0.8, 0.2, 1) 1900ms both;
+}
+
+/* The hand-off: the overlay lifts towards the viewer while the hero rises into place. */
+html[data-splash="play"] .gd-splash-scene {
+  animation: gd-splash-push 300ms cubic-bezier(0.4, 0, 1, 1) 2350ms forwards;
+}
+
+html[data-splash="play"] .gd-splash {
+  animation: gd-splash-out 400ms cubic-bezier(0.4, 0, 0.2, 1) 2450ms forwards;
+}
+
+html[data-splash="play"] .gd-hero-reveal {
+  animation: gd-hero-rise 640ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(2480ms + var(--reveal-i, 0) * 90ms);
+}
+
+/* Reduced motion: the finished frame for a moment, then it gives way (the global reduced-motion
+   rule makes the fade instant). */
+html[data-splash="static"] .gd-splash {
+  animation: gd-splash-out 300ms ease-out 1500ms forwards;
+}
+
+html[data-splash="skip"] .gd-splash {
+  animation: gd-splash-skip 200ms ease-out forwards;
+}
+
+@media (min-width: 640px) {
+  html[data-splash] .gd-splash {
+    --graph-scale: 1.55;
+  }
+}
+
+@media print {
+  html[data-splash] .gd-splash {
+    display: none;
+  }
+}
+
+@keyframes gd-splash-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes gd-splash-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes gd-splash-glow {
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+/* Opacity too: a round cap on a not-yet-drawn line would otherwise show as a dot. */
+@keyframes gd-splash-draw {
+  from {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+  8% {
+    opacity: 1;
+  }
+}
+
+@keyframes gd-splash-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes gd-splash-halo {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+@keyframes gd-splash-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(3.4);
+  }
+}
+
+@keyframes gd-splash-settle {
+  from {
+    transform: scale(var(--graph-scale));
+  }
+}
+
+@keyframes gd-splash-resolve {
+  70% {
+    opacity: 1;
+    transform: translate(var(--dx), var(--dy)) scale(var(--s));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(var(--s));
+  }
+}
+
+@keyframes gd-splash-dissolve {
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(var(--s));
+  }
+}
+
+@keyframes gd-splash-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes gd-splash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes gd-splash-push {
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(1.06);
+  }
+}
+
+@keyframes gd-splash-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes gd-splash-skip {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes gd-hero-rise {
+  from {
+    transform: translateY(20px);
+  }
+}

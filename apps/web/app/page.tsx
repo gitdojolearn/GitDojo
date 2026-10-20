@@ -2,6 +2,7 @@ import { toCourseOutline } from "@gitdojo/lesson-engine";
 import { type Metadata } from "next";
 import Link from "next/link";
 import { HeroDemo } from "@/components/landing/hero-demo";
+import { ReplayIntro } from "@/components/landing/replay-intro";
 import {
   BreakSection,
   CertificationSection,
@@ -11,6 +12,7 @@ import {
   OpenSourceSection,
   VisualizeSection,
 } from "@/components/landing/sections";
+import { Splash } from "@/components/landing/splash";
 import { StartLearningLink } from "@/components/landing/start-learning";
 import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
@@ -24,7 +26,8 @@ import {
 import { loadAllCourses } from "@/lib/lessons";
 import { SITE } from "@/lib/site";
 import { Button } from "@gitdojo/ui";
-import { GitFork, ShieldCheck, SquareTerminal, UserRoundX } from "lucide-react";
+import { GitFork, RotateCcw, ShieldCheck, SquareTerminal, UserRoundX } from "lucide-react";
+import { type CSSProperties } from "react";
 
 const DESCRIPTION =
   "Learn Git by typing real commands in a safe browser sandbox: short hands-on courses, challenges, Practice tasks and a playground, plus a completion certificate you can share.";
@@ -58,6 +61,8 @@ export default async function HomePage() {
 
   return (
     <>
+      {/* First in the document, so its Skip button is the first thing Tab reaches. */}
+      <Splash />
       <SiteHeader action={<StartLearningLink firstLessonHref={firstLessonHref} size="sm" />} />
       <main>
         <section aria-labelledby="hero-heading" className="relative overflow-hidden">
@@ -67,10 +72,12 @@ export default async function HomePage() {
             className="pointer-events-none absolute inset-x-0 -top-40 h-140 bg-[radial-gradient(ellipse_at_center,var(--accent-glow),transparent_65%)]"
           />
           <div className="relative mx-auto grid max-w-[1280px] gap-12 px-4 pt-14 pb-16 sm:px-6 sm:pt-24 sm:pb-24 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:items-center lg:gap-16">
-            <div>
+            <div className="gd-hero-reveal" style={{ "--reveal-i": 0 } as CSSProperties}>
+              {/* Focusable from script only: focus lands here when the intro is skipped. */}
               <h1
                 id="hero-heading"
-                className="text-h1 font-bold tracking-[-0.03em] text-fg sm:text-display"
+                tabIndex={-1}
+                className="text-h1 font-bold tracking-[-0.03em] text-fg outline-none sm:text-display"
               >
                 Learn Git <span className="text-accent">by doing.</span>
               </h1>
@@ -94,9 +101,16 @@ export default async function HomePage() {
                     {label}
                   </li>
                 ))}
+                <li>
+                  <ReplayIntro>
+                    <RotateCcw aria-hidden="true" /> Replay intro
+                  </ReplayIntro>
+                </li>
               </ul>
             </div>
-            <HeroDemo />
+            <div className="gd-hero-reveal min-w-0" style={{ "--reveal-i": 1 } as CSSProperties}>
+              <HeroDemo />
+            </div>
           </div>
         </section>
         <HowItWorks />
