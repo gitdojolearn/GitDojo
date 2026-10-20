@@ -233,6 +233,8 @@
   --animate-gd-pop: gd-pop 300ms ease-out both;
   --animate-gd-check: gd-check 250ms ease-out both;
   --animate-gd-pulse-x: gd-pulse-x 1.6s ease-in-out infinite;
+  /* A terminal cursor: blinks a few times, then stays solid (WCAG 2.2.2). */
+  --animate-gd-blink: gd-blink 1.1s steps(1) 6 both;
 }
 
 @keyframes gd-enter {
@@ -261,6 +263,12 @@
   from {
     opacity: 0.2;
     transform: scale(0.7);
+  }
+}
+
+@keyframes gd-blink {
+  50% {
+    opacity: 0;
   }
 }
 
