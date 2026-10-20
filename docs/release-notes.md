@@ -10,8 +10,10 @@ deployment details stay on GitHub.
 
 When staging passes, the release workflow creates a draft with learner highlights collected from
 the merged pull requests and GitHub's generated changelog below them. The pull request template
-asks contributors to add a `Learner-facing release note` section with one plain-language bullet,
-or write `No learner-facing change.` for internal work. The generator reads that section, removes
+asks contributors to add a `Learner-facing release note` section with plain-language bullets,
+or write `No learner-facing change.` for internal work. The required PR release note CI check runs
+when a PR opens, its code changes, or its description is edited, so missing or malformed notes
+are caught in PR CI. The generator reads that same section, removes
 duplicates and places the resulting bullets under `## Highlights for learners` automatically.
 GitHub's technical changelog is grouped using [`.github/release.yml`](../.github/release.yml).
 If all included PRs are marked as internal-only, the draft uses a neutral behind-the-scenes
@@ -54,7 +56,9 @@ Formatting: `code` and **bold** are shown; everything else is plain text.
 `apps/web/scripts/compose-release-notes.mjs` assembles the learner highlights from merged PRs when
 the draft is created. It stops before creating a draft if a merged PR is missing the required
 section or the release would exceed five highlights. Add or correct the section in the merged PR
-description and rerun the **Release** workflow. Bot-authored dependency PRs are left out of learner
+description and rerun the **Release** workflow. The PR check cannot retroactively validate PRs
+merged before it was added; `.github/legacy-pr-release-notes.json` contains the reviewed note for
+PR #71, which predates the check. Bot-authored dependency PRs are left out of learner
 highlights. If every human PR is internal-only, the draft gets a neutral behind-the-scenes message.
 The **Publish release** workflow then checks the
 final edited draft with `apps/web/scripts/release-highlights.mjs` before any production deployment.

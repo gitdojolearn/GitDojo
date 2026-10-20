@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   merge_group:
   workflow_dispatch:
     inputs:
@@ -34,6 +35,17 @@ env:
   TURBO_TELEMETRY_DISABLED: "1"
 
 jobs:
+  release_note:
+    name: PR release note
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check learner-facing release note
+        run: node apps/web/scripts/check-pr-release-note.mjs
+
   quality:
     name: Quality / ${{ matrix.check }}
     runs-on: ubuntu-latest
@@ -341,7 +353,8 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [quality, unit, database, content, audit, build, browser, accounts, performance]
+    needs:
+      [release_note, quality, unit, database, content, audit, build, browser, accounts, performance]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

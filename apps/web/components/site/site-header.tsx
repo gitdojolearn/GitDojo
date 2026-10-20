@@ -54,7 +54,7 @@ export function SiteHeader({ action }: { action?: ReactNode } = {}) {
           {action ? <div className="hidden sm:block">{action}</div> : null}
           <ThemeToggle />
           <Button asChild variant="secondary" size="sm">
-            <a href={SITE.githubUrl} aria-label="Star GitDojo on GitHub">
+            <a href={SITE.githubUrl} aria-label="Star on GitHub">
               <GitHubIcon />
               {/* With a page action there is no room for the label next to the full nav. */}
               <span className={action ? "hidden" : "hidden lg:inline"}>Star on GitHub</span>

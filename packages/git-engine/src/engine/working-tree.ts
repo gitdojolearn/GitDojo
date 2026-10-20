@@ -33,6 +33,72 @@ export async function readBlobText(ctx: GitContext, oid: string): Promise<string
   return new TextDecoder().decode(blob);
 }
 
+/**
+ * Text of blobs already read, by oid. A blob's oid is its content, so entries never go stale and are
+ * shared across snapshots and workspaces. Bounded so a long session cannot grow it forever.
+ */
+const blobTextByOid = new Map<string, string>();
+const BLOB_TEXT_LIMIT = 2_000;
+
+async function readCachedBlobText(ctx: GitContext, oid: string): Promise<string> {
+  const cached = blobTextByOid.get(oid);
+  if (cached !== undefined) return cached;
+  const text = await readBlobText(ctx, oid);
+  if (blobTextByOid.size >= BLOB_TEXT_LIMIT) {
+    const oldest = blobTextByOid.keys().next().value;
+    if (oldest !== undefined) blobTextByOid.delete(oldest);
+  }
+  blobTextByOid.set(oid, text);
+  return text;
+}
+
+/** Blob oid of every stage-0 index entry, by path. */
+async function readIndexOids(ctx: GitContext): Promise<Map<string, string>> {
+  const oids = new Map<string, string>();
+  await git.walk({
+    fs: ctx.fs,
+    dir: ctx.dir,
+    trees: [git.STAGE()],
+    map: async (path, [entry]) => {
+      if (path !== "." && entry && (await entry.type()) === "blob") {
+        oids.set(path, await entry.oid());
+      }
+      return undefined;
+    },
+  });
+  return oids;
+}
+
+/**
+ * Current working-tree text of every entry that exists in the working directory. A path whose
+ * working copy matches the index (as `git status` sees it) is read from its index blob, which is
+ * cached by oid; only untracked, modified and `skip` paths (such as unresolved conflicts) are read
+ * from the working directory, so a snapshot no longer reads every file on every command.
+ */
+export async function readWorkingTexts(
+  ctx: GitContext,
+  entries: readonly GitStatusEntry[],
+  skip: ReadonlySet<string>,
+): Promise<Map<string, string>> {
+  const indexOids = await readIndexOids(ctx);
+  const texts = new Map<string, string>();
+  await Promise.all(
+    entries
+      .filter((entry) => entry.inWorkdir)
+      .map(async (entry) => {
+        const oid =
+          entry.unstaged === null && !skip.has(entry.path) ? indexOids.get(entry.path) : undefined;
+        texts.set(
+          entry.path,
+          oid === undefined
+            ? ((await readWorkingText(ctx, entry.path)) ?? "")
+            : await readCachedBlobText(ctx, oid),
+        );
+      }),
+  );
+  return texts;
+}
+
 export async function readWorkingText(ctx: GitContext, path: string): Promise<string | null> {
   const absolute = `${ctx.dir}/${path}`;
   if (!(await pathExists(ctx.fs.promises, absolute))) return null;
