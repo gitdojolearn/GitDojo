@@ -107,6 +107,24 @@ test("landing page starts a new learner at the first lesson", async ({ page }) =
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("What is Git?");
 });
 
+test.describe("landing page hero demo", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  test("steps through by keyboard and leads to the playground", async ({ page }) => {
+    await page.goto("/");
+    const demo = page.getByRole("figure", { name: "Demo: Your first commit" });
+    const repository = demo.getByRole("group", { name: "Repository" });
+    // Reduced motion: it waits for the visitor instead of playing.
+    await expect(repository).toContainText("No .git yet");
+    await demo.getByRole("button", { name: "Step 4: git commit" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(repository).toContainText("HEAD");
+    await expect(demo.getByRole("region", { name: "Terminal" })).toContainText("Initial commit");
+    await page.getByTestId("hero-playground").click();
+    await expect(page).toHaveURL(/\/playground$/);
+  });
+});
+
 test("every landing page link leads somewhere real", async ({ page, request }) => {
   await page.goto("/");
   const hrefs = await page
