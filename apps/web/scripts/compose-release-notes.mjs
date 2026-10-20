@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
+import { parsePullRequestReleaseNote } from "./pr-release-note.mjs";
 import { parseLearnerHighlights } from "./release-highlights.mjs";
 
 const [changelogPath, outputPath] = process.argv.slice(2);
@@ -13,6 +14,8 @@ if (!changelogPath || !outputPath || !repository || !/^[\w.-]+\/[\w.-]+$/.test(r
 }
 
 const changelog = (await readFile(changelogPath, "utf8")).trim();
+// Notes for PRs merged before the required PR check existed. New PRs must supply their own note.
+const legacyNotes = JSON.parse(await readFile(".github/legacy-pr-release-notes.json", "utf8"));
 const pullRequestNumbers = [
   ...new Set(
     [...changelog.matchAll(/\bin\s+#(\d+)\b|\/pull\/(\d+)\b/g)].map(
@@ -25,16 +28,6 @@ if (pullRequestNumbers.length === 0) {
   throw new Error("GitHub generated no pull request links; cannot collect learner release notes.");
 }
 
-function removeHtmlComments(input) {
-  let previous;
-  let current = input;
-  do {
-    previous = current;
-    current = current.replace(/<!--[\s\S]*?-->/g, "");
-  } while (current !== previous);
-  return current;
-}
-
 const highlights = [];
 const missingNotes = [];
 for (const number of pullRequestNumbers) {
@@ -45,33 +38,21 @@ for (const number of pullRequestNumbers) {
   if (pullRequest.merged_at === null || pullRequest.base?.ref !== "main") continue;
   if (pullRequest.user?.type === "Bot") continue;
 
-  const body = String(pullRequest.body ?? "").replace(/\r\n?/g, "\n");
-  const heading = /^#{2,3}[ \t]+Learner-facing release note[ \t]*:?[ \t]*$/im.exec(body);
-  if (!heading) {
-    missingNotes.push(`#${number} ${pullRequest.title}`);
-    continue;
+  try {
+    highlights.push(...parsePullRequestReleaseNote(pullRequest.body));
+  } catch (error) {
+    const fallback = legacyNotes[number];
+    if (
+      error.message.startsWith('Add a "## Learner-facing release note" section') &&
+      typeof fallback === "string"
+    ) {
+      highlights.push(
+        ...parsePullRequestReleaseNote(`## Learner-facing release note\n\n${fallback}`),
+      );
+    } else {
+      missingNotes.push(`#${number} ${pullRequest.title}: ${error.message}`);
+    }
   }
-
-  const start = heading.index + heading[0].length;
-  const nextHeading = /^#{1,6}[ \t]+/m.exec(body.slice(start));
-  const section = removeHtmlComments(
-    body.slice(start, nextHeading ? start + nextHeading.index : undefined),
-  ).trim();
-
-  if (/^(?:[-*+]\s*)?(?:none|no learner-facing change)\.?$/i.test(section)) continue;
-
-  const lines = section
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const bullets = lines.map((line) => /^[-*+][ \t]+(.+)$/.exec(line)?.[1]?.trim());
-  if (bullets.length === 0 || bullets.some((bullet) => !bullet)) {
-    missingNotes.push(
-      `#${number} ${pullRequest.title} (use one plain-language bullet or “No learner-facing change.”)`,
-    );
-    continue;
-  }
-  highlights.push(...bullets);
 }
 
 if (missingNotes.length > 0) {
