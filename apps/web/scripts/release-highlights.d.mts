@@ -16,3 +16,5 @@ export declare function parseLearnerHighlights(body: string): {
   intro: string | null;
   highlights: string[];
 };
+
+export declare function stripHtmlComments(input: string): string;

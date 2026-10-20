@@ -40,7 +40,7 @@ const BULLET = /^[-*+][ \t]+(.*)$/;
  * @param {string} input
  * @returns {string}
  */
-function stripHtmlComments(input) {
+export function stripHtmlComments(input) {
   let current = input;
   while (true) {
     const next = current.replace(/<!--[\s\S]*?-->/g, "");

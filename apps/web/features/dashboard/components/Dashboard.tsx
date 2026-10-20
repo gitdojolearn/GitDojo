@@ -76,6 +76,7 @@ export function Dashboard({ catalog }: { catalog: ProgressCatalog }) {
 
       {progress === null ? (
         <div
+          role="status"
           aria-busy="true"
           aria-label="Loading progress"
           data-testid="dashboard-loading"

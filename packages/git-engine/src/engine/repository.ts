@@ -42,6 +42,36 @@ export function createCommitCache(): CommitCache {
   return new Map();
 }
 
+/**
+ * Paths each commit changes, by oid. An oid pins the commit's tree and parents (and so their trees),
+ * so the answer never changes: it is shared across snapshots and workspaces, and each commit's trees
+ * are diffed once rather than on every snapshot. Bounded so a long session cannot grow it forever.
+ */
+const changedPathsByOid = new Map<string, readonly string[]>();
+const CHANGED_PATHS_LIMIT = 10_000;
+
+async function readChangedPaths(
+  ctx: GitContext,
+  oid: string,
+  parent: string | null,
+): Promise<string[]> {
+  const cached = changedPathsByOid.get(oid);
+  if (cached) return [...cached];
+  const [tree, parentTree] = await Promise.all([
+    readTreeFiles(ctx, oid),
+    readTreeFiles(ctx, parent),
+  ]);
+  const changedPaths = [...new Set([...tree.keys(), ...parentTree.keys()])]
+    .filter((path) => tree.get(path) !== parentTree.get(path))
+    .sort();
+  if (changedPathsByOid.size >= CHANGED_PATHS_LIMIT) {
+    const oldest = changedPathsByOid.keys().next().value;
+    if (oldest !== undefined) changedPathsByOid.delete(oldest);
+  }
+  changedPathsByOid.set(oid, changedPaths);
+  return [...changedPaths];
+}
+
 async function readCachedCommit(
   ctx: GitContext,
   oid: string,
@@ -50,13 +80,7 @@ async function readCachedCommit(
   const cached = cache.get(oid);
   if (cached) return cached;
   const { commit } = await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid });
-  const [tree, parentTree] = await Promise.all([
-    readTreeFiles(ctx, oid),
-    readTreeFiles(ctx, commit.parent[0] ?? null),
-  ]);
-  const changedPaths = [...new Set([...tree.keys(), ...parentTree.keys()])]
-    .filter((path) => tree.get(path) !== parentTree.get(path))
-    .sort();
+  const changedPaths = await readChangedPaths(ctx, oid, commit.parent[0] ?? null);
   const entry: CachedCommit = {
     info: {
       oid,

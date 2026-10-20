@@ -17,7 +17,7 @@ import { operationKind, readMergeState } from "../engine/merge-state";
 import { readStashes, toStashEntry } from "../engine/stash-store";
 import { readReflog, ZERO_OID } from "../engine/reflog";
 import { readStatusEntries } from "../engine/status-matrix";
-import { readWorkingText } from "../engine/working-tree";
+import { readWorkingTexts } from "../engine/working-tree";
 
 export async function readSnapshot(ctx: GitContext): Promise<GitRepositorySnapshot> {
   if (!(await isRepository(ctx))) {
@@ -84,6 +84,12 @@ export async function readSnapshot(ctx: GitContext): Promise<GitRepositorySnapsh
   ].filter((oid) => oid !== null);
   // HEAD's history and every branch's share most commits: read each one once.
   const cache = createCommitCache();
+  // Conflicted paths hold markers that the index does not: always read them from disk.
+  const texts = await readWorkingTexts(
+    ctx,
+    entries,
+    new Set(merge?.conflicts.map((conflict) => conflict.path) ?? []),
+  );
 
   return {
     initialized: true,
@@ -92,12 +98,10 @@ export async function readSnapshot(ctx: GitContext): Promise<GitRepositorySnapsh
     branches,
     commits: head === null ? [] : await readCommitsFromHead(ctx, cache),
     allCommits: await readCommitsFrom(ctx, tips, cache),
-    entries: await Promise.all(
-      entries.map(async (entry) => ({
-        ...entry,
-        ...(entry.inWorkdir ? { content: (await readWorkingText(ctx, entry.path)) ?? "" } : {}),
-      })),
-    ),
+    entries: entries.map((entry) => ({
+      ...entry,
+      ...(entry.inWorkdir ? { content: texts.get(entry.path) ?? "" } : {}),
+    })),
     reflog: reflog.map((entry, index) => ({
       index,
       oid: entry.newOid,
