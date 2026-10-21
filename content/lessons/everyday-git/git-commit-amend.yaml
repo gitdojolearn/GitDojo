@@ -3,7 +3,7 @@
 id: git-commit-amend
 slug: git-commit-amend
 title: Amend Your Last Commit
-type: concept
+type: interactive
 
 goal: Correct a recent commit with `git commit --amend`, and know when it is safe to do so.
 
@@ -20,6 +20,38 @@ concepts:
   - amend
   - commits
   - history
+
+commands:
+  - git commit --amend
+  - git commit --amend --no-edit
+  - git log --oneline
+
+setup:
+  initializeGit: true
+  commits:
+    - message: Initial commit
+      files:
+        README.md: "# Login app\n"
+    - message: Add login form
+      files:
+        login.js: "export function login() {}\n"
+  files:
+    login.css: ".login { display: grid; }\n"
+
+objectives:
+  - id: include-file
+    description: Include the forgotten stylesheet in the latest commit.
+    validator:
+      type: file_committed
+      file: login.css
+
+  - id: amend-message
+    description: Replace the latest commit message without adding another commit.
+    validator:
+      type: branch_history
+      branch: main
+      messages: [Add login form with validation, Initial commit]
+      complete: true
 
 content:
   - type: text
@@ -110,6 +142,27 @@ content:
   - type: callout
     tone: note
     body: >-
-      GitDojo's terminal does not accept `--amend` yet. The same shape of fix is covered
-      hands-on in **Undo and Recover**: `git reset --soft HEAD~1` puts the last commit's changes
-      back in the staging area, ready to be committed again with a better message.
+      GitDojo supports amending the latest commit locally. It does not support force-pushing a
+      rewritten commit to a shared remote; use a new commit or `git revert` once the commit has
+      been published.
+
+hints:
+  amend-message:
+    - The newest commit is still only on your local branch, so it is safe to replace.
+    - "`--amend` replaces the latest commit; `-m` supplies its corrected message."
+    - Run `git commit --amend -m "Add login form with validation"`.
+
+adaptiveHints:
+  - id: message-still-old
+    objective: amend-message
+    when:
+      - type: branch_history
+        branch: main
+        messages: [Add login form, Initial commit]
+        complete: true
+      - type: file_committed
+        file: login.css
+    hints:
+      - The file is included now, but the latest commit still has its original message.
+      - Amend once more and provide the corrected message with `-m`.
+      - Run `git commit --amend -m "Add login form with validation"`.

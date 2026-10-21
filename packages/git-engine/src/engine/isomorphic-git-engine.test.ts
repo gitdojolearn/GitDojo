@@ -278,6 +278,27 @@ describe("IsomorphicGitEngine", () => {
       expect((await git.snapshot()).commits[0]?.author.name).toBe("Ada");
     });
 
+    it("amends the tip, preserving its author and parent while replacing staged content", async () => {
+      const { git, files, workspaceId } = await createTestWorkspace({ "README.md": README });
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial", author: { name: "Ada", email: "ada@example.com" } });
+      const original = (await git.snapshot()).commits[0];
+      await files.writeFile(workspaceId, "README.md", "updated\n");
+      await git.add(["README.md"]);
+
+      const amended = await git.commit({ message: "Correct README", amend: true });
+      const history = (await git.snapshot()).commits;
+      expect(amended.ok).toBe(true);
+      expect(history).toHaveLength(1);
+      expect(history[0]).toMatchObject({
+        message: "Correct README",
+        author: { name: "Ada", email: "ada@example.com" },
+        parents: original?.parents,
+      });
+      expect(await files.readFile(workspaceId, "README.md")).toBe("updated\n");
+    });
+
     it("fails with nothing staged", async () => {
       const { git } = await createTestWorkspace({ "README.md": README });
       await git.init();
@@ -352,6 +373,67 @@ describe("IsomorphicGitEngine", () => {
     it("fails outside a repository", async () => {
       const { git } = await createTestWorkspace();
       expect((await git.log()).error?.code).toBe("NOT_A_REPOSITORY");
+    });
+  });
+
+  describe("show", () => {
+    it("shows commit metadata and the first-parent patch", async () => {
+      const { git, files, workspaceId } = await createTestWorkspace({ "README.md": README });
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial commit" });
+      await files.writeFile(workspaceId, "README.md", "# Changed\n");
+      await git.add(["README.md"]);
+      await git.commit({ message: "Update README" });
+
+      const result = await git.show();
+      expect(result.ok).toBe(true);
+      expect(result.output).toContain("Update README");
+      expect(result.output).toContain("-# GitDojo");
+      expect(result.output).toContain("+# Changed");
+      expect(result.data?.files.map(({ path }) => path)).toEqual(["README.md"]);
+    });
+
+    it("shows the contents of a path at a selected revision", async () => {
+      const { git } = await createTestWorkspace({ "README.md": README });
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial commit" });
+      expect((await git.show("HEAD:README.md")).output).toBe(README);
+      expect((await git.show(":README.md")).error?.code).toBe("INVALID_REVISION");
+    });
+  });
+
+  describe("mv", () => {
+    it("moves a tracked file and stages the rename", async () => {
+      const { git, files, workspaceId } = await createTestWorkspace({ "README.md": README });
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial commit" });
+
+      const result = await git.mv(["README.md", "docs/README.md"]);
+      expect(result).toMatchObject({
+        ok: true,
+        data: { source: "README.md", destination: "docs/README.md" },
+      });
+      expect(await files.exists(workspaceId, "README.md")).toBe(false);
+      expect(await files.readFile(workspaceId, "docs/README.md")).toBe(README);
+      expect((await git.status()).data?.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: "README.md", staged: "deleted" }),
+          expect.objectContaining({ path: "docs/README.md", staged: "added" }),
+        ]),
+      );
+    });
+
+    it("refuses to overwrite an existing destination", async () => {
+      const { git } = await createTestWorkspace({ "README.md": README, "copy.md": "existing\n" });
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial commit" });
+      const result = await git.mv(["README.md", "copy.md"]);
+      expect(result.error?.code).toBe("INVALID_ARGUMENT");
+      expect(result.output).toContain("already exists");
     });
   });
 

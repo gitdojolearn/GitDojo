@@ -3,7 +3,7 @@
 id: git-mv
 slug: git-mv
 title: Rename or Move a File
-type: concept
+type: interactive
 
 goal: Track file renames with `git mv`, and understand why Git has no rename to track.
 
@@ -17,6 +17,27 @@ concepts:
   - git-mv
   - staging
   - renames
+
+commands:
+  - git mv
+  - git status
+  - git commit
+
+setup:
+  initializeGit: true
+  commits:
+    - message: Add meeting notes
+      files:
+        notes.txt: "- [ ] Prepare agenda\n- [ ] Share notes\n"
+
+objectives:
+  - id: move-notes
+    description: Record the notes at docs/notes.md in a commit, with the old path removed.
+    validator:
+      type: commit_changes
+      branch: main
+      message: Move notes into docs
+      files: [notes.txt, docs/notes.md]
 
 content:
   - type: text
@@ -65,11 +86,12 @@ content:
       On branch main
       Changes to be committed:
         (use "git restore --staged <file>..." to unstage)
-      	renamed:    notes.txt -> docs/notes.md
+        new file:   docs/notes.md
+        deleted:    notes.txt
     explanation: >-
-      Git prints `renamed:` because the staged delete and the staged add have identical contents.
-      Change the file as well and the same state is reported as a separate `deleted:` and
-      `new file:`.
+      GitDojo reports the two staged paths separately. Git clients with rename detection enabled
+      may present the same snapshot as `renamed:`; the commit still stores a path deletion and an
+      addition with identical contents.
 
   - type: comparison
     title: Two ways to do the same thing
@@ -78,7 +100,7 @@ content:
         items:
           - Moves the file and stages the change
           - One command, nothing left half-done
-          - Refuses to overwrite an existing file unless you pass `-f`
+          - Refuses to overwrite an existing destination; GitDojo does not implement `-f`
       - title: Move it in your editor
         items:
           - Git sees an untracked file and a missing one
@@ -102,6 +124,27 @@ content:
   - type: callout
     tone: note
     body: >-
-      GitDojo's terminal does not run `git mv` yet, so this lesson is a walkthrough rather than a
-      hands-on exercise. In the **Playground** you can get to the same commit by hand: create the
-      file at its new path, delete the old one, and stage both changes with `git add .`.
+      GitDojo stages both paths locally; Git still detects and displays the rename from the
+      matching contents when it reports the commit. The simulated remote does not publish anything
+      unless a separate branch-push lesson asks you to push.
+
+hints:
+  move-notes:
+    - A tracked file can be moved and staged in one operation; its destination folder is created as needed.
+    - "`git mv` takes the current path first and the new path second."
+    - 'Run `git mv notes.txt docs/notes.md`, then `git commit -m "Move notes into docs"`.'
+
+adaptiveHints:
+  - id: manual-move-not-staged
+    objective: move-notes
+    when:
+      - type: file_status
+        file: notes.txt
+        status: deleted
+      - type: file_status
+        file: docs/notes.md
+        status: untracked
+    hints:
+      - The file is in the right place, but Git has not staged the old and new paths yet.
+      - Stage both sides of the move, then commit the rename.
+      - Run `git add .`, then `git commit -m "Move notes into docs"`.

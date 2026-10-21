@@ -39,6 +39,8 @@ await git.init();
 await git.status();
 await git.add(["README.md"]); // or ["."]
 await git.commit({ message: "Initial commit" }); // author defaults to GitDojo Learner
+await git.commit({ message: "Corrected message", amend: true }); // replace HEAD, preserve author/parents
+await git.commit({ message: "", amend: true, noEdit: true }); // keep HEAD's message
 await git.log({ oneline: true }); // also { revision: "feature" } and { all: true }
 await git.showBranches(); // `git branch`
 await git.createBranch("feature/login"); // `git branch feature/login [<start-point>]`
@@ -83,6 +85,9 @@ await git.snapshot(); // read-only view used by @gitdojo/repository-state
 ```
 
 An engine is bound to one workspace. Command methods **never reject**. They return:
+
+See [command-coverage.md](./command-coverage.md) for the curriculum coverage matrix and current
+boundaries around `git show`, `git mv`, interactive rebase and simulated remotes.
 
 ```ts
 interface GitCommandResult<T> {
