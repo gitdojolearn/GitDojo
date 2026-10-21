@@ -10,6 +10,8 @@ import { runCommit } from "../commands/commit";
 import { runDiff } from "../commands/diff";
 import { runInit } from "../commands/init";
 import { runLog } from "../commands/log";
+import { runShow } from "../commands/show";
+import { runMv } from "../commands/mv";
 import { runPick, runSequencer } from "../commands/pick";
 import { runCloseEditor, runRebase, runRebaseControl } from "../commands/rebase";
 import {
@@ -70,6 +72,8 @@ import {
   type GitInitResult,
   type GitLogOptions,
   type GitLogResult,
+  type GitShowResult,
+  type GitMvResult,
   type GitMergeOptions,
   type GitMergeResult,
   type GitRepositorySnapshot,
@@ -150,6 +154,14 @@ export class IsomorphicGitEngine implements GitEngine {
 
   log(options?: GitLogOptions): Promise<GitLogResult> {
     return guard(() => runLog(this.ctx, options));
+  }
+
+  show(spec?: string): Promise<GitShowResult> {
+    return guard(() => runShow(this.ctx, spec));
+  }
+
+  mv(paths: string[]): Promise<GitMvResult> {
+    return mutating(this.ctx, () => runMv(this.ctx, paths));
   }
 
   showBranches(options?: GitShowBranchesOptions): Promise<GitBranchListResult> {

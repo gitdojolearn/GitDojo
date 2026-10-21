@@ -61,7 +61,7 @@ export async function allRefTips(ctx: GitContext): Promise<string[]> {
   return [head, ...branches, ...tags, ...remotes].filter((oid) => oid !== null);
 }
 
-function formatCommit(commit: GitCommitInfo, decoration: string, oneline: boolean): string {
+export function formatCommit(commit: GitCommitInfo, decoration: string, oneline: boolean): string {
   if (oneline) return `${commit.shortOid}${decoration} ${commit.message.split("\n")[0] ?? ""}`;
   const body = commit.message
     .split("\n")

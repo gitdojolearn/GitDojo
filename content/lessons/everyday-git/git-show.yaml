@@ -119,5 +119,5 @@ content:
   - type: callout
     tone: note
     body: >-
-      GitDojo's terminal does not run `git show` yet. Until it does, `git log` names the commits
-      and clicking a commit in the **Graph** panel opens its details.
+      `git show` is available in GitDojo's terminal for commit patches and `<commit>:<path>` file
+      contents. Clicking a commit in the **Graph** panel also opens its details.

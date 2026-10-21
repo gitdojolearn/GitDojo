@@ -25,10 +25,14 @@ export const GIT_COMMAND_SPECS = {
   },
   commit: {
     name: "commit",
-    summary: "Record staged changes as a new commit",
-    usage: 'git commit -m "<message>"',
+    summary: "Record staged changes (--amend: replace the latest commit)",
+    usage: 'git commit [-m "<message>"] [--amend [--no-edit]]',
     // `-m` is checked by the engine: while concluding a merge, `git commit` alone is enough.
-    flags: [{ name: "m", aliases: ["message"], takesValue: true, repeatSeparator: "\n\n" }],
+    flags: [
+      { name: "m", aliases: ["message"], takesValue: true, repeatSeparator: "\n\n" },
+      { name: "amend", takesValue: false },
+      { name: "no-edit", takesValue: false },
+    ],
     acceptsArguments: false,
   },
   log: {
@@ -41,6 +45,22 @@ export const GIT_COMMAND_SPECS = {
     ],
     acceptsArguments: true,
     maxArguments: 1,
+  },
+  show: {
+    name: "show",
+    summary: "Show a commit and its changes, or a file at a revision",
+    usage: "git show [<commit> | <commit>:<path>]",
+    flags: [],
+    acceptsArguments: true,
+    maxArguments: 1,
+  },
+  mv: {
+    name: "mv",
+    summary: "Move a tracked file and stage the rename",
+    usage: "git mv <source> <destination>",
+    flags: [],
+    acceptsArguments: true,
+    maxArguments: 2,
   },
   branch: {
     name: "branch",
@@ -245,7 +265,7 @@ export function isSupportedGitCommand(command: string): command is SupportedGitC
 }
 
 /** Real Git commands that later GitDojo phases will support; they get a friendlier message. */
-export const PLANNED_GIT_COMMANDS: ReadonlySet<string> = new Set(["clone", "config", "mv", "show"]);
+export const PLANNED_GIT_COMMANDS: ReadonlySet<string> = new Set(["clone", "config"]);
 
 /** Terminal built-ins. They are parsed like any other input and never reach an OS shell. */
 export const BUILTIN_PROGRAMS = {
