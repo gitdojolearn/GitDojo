@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!isUuid(id)) return Response.json({ error: "not_found" }, { status: 404, headers: PRIVATE });
   let body: unknown;
-  let sizeBytes = 0;
+  let sizeBytes: number;
   try {
     const parsed = await limitedJsonWithSize(request, 3 * 1024 * 1024);
     body = parsed.value;

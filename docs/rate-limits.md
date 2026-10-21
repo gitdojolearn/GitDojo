@@ -50,10 +50,10 @@ Assessment creation and submission also use PostgreSQL-backed account quotas. Th
 counters apply across production instances. Attempt creation costs one unit; a submission costs
 one unit per 64 KiB of received JSON (up to 3 MiB). Each quota uses the assessment window below.
 
-| Variable                                      | Default | Meaning                                      |
-| --------------------------------------------- | ------: | -------------------------------------------- |
-| `GITDOJO_ASSESSMENT_CREATE_MAX`               |       5 | Attempt creations per account per window     |
-| `GITDOJO_ASSESSMENT_SUBMIT_MAX`               |      48 | Submission cost units per account per window |
+| Variable                                       | Default | Meaning                                      |
+| ---------------------------------------------- | ------: | -------------------------------------------- |
+| `GITDOJO_ASSESSMENT_CREATE_MAX`                |       5 | Attempt creations per account per window     |
+| `GITDOJO_ASSESSMENT_SUBMIT_MAX`                |      48 | Submission cost units per account per window |
 | `GITDOJO_ASSESSMENT_RATE_LIMIT_WINDOW_SECONDS` |      60 | Assessment quota window                      |
 
 Requests above an account quota receive the same `429` JSON response and a `Retry-After` header.

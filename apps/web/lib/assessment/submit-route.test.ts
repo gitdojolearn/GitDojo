@@ -21,7 +21,10 @@ vi.mock("@/lib/http/rate-limit", () => ({
   rateLimitedResponse: (retryAfter: number) =>
     Response.json(
       { error: { code: "rate_limited", message: "Too many requests. Try again shortly." } },
-      { status: 429, headers: { "Cache-Control": "private, no-store", "Retry-After": String(retryAfter) } },
+      {
+        status: 429,
+        headers: { "Cache-Control": "private, no-store", "Retry-After": String(retryAfter) },
+      },
     ),
 }));
 
