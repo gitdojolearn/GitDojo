@@ -1,11 +1,13 @@
 import { connection } from "next/server";
 import { type AssessmentEvidence } from "@gitdojo/shared-types";
 import { getVerifiedIdentity } from "@/lib/auth/identity";
-import { limitedJson } from "@/lib/http/limited-json";
+import { limitedJsonWithSize } from "@/lib/http/limited-json";
 import { isSameOriginRequest } from "@/lib/http/same-origin";
 import { isUuid } from "@/lib/ids";
 import { nameRequiredMessage } from "@/lib/certificates/certificate-name";
 import { submitAttempt } from "@/lib/assessment/store";
+import { assessmentSubmissionCost, consumeAssessmentQuota } from "@/lib/assessment/rate-limit";
+import { rateLimitedResponse } from "@/lib/http/rate-limit";
 
 export const runtime = "nodejs";
 const PRIVATE = { "Cache-Control": "private, no-store" };
@@ -20,8 +22,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!isUuid(id)) return Response.json({ error: "not_found" }, { status: 404, headers: PRIVATE });
   let body: unknown;
+  let sizeBytes: number;
   try {
-    body = await limitedJson(request, 3 * 1024 * 1024);
+    const parsed = await limitedJsonWithSize(request, 3 * 1024 * 1024);
+    body = parsed.value;
+    sizeBytes = parsed.sizeBytes;
   } catch {
     return Response.json({ error: "invalid_json_or_size" }, { status: 400, headers: PRIVATE });
   }
@@ -31,6 +36,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!evidence || typeof evidence !== "object" || typeof publicNameConsent !== "boolean")
     return Response.json({ error: "invalid_body" }, { status: 400, headers: PRIVATE });
   try {
+    const retryAfter = await consumeAssessmentQuota(
+      auth.identity,
+      "submit",
+      assessmentSubmissionCost(sizeBytes),
+    );
+    if (retryAfter !== null) return rateLimitedResponse(retryAfter);
     const outcome = await submitAttempt(
       auth.identity,
       id,

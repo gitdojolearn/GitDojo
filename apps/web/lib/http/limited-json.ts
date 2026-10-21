@@ -1,4 +1,7 @@
-export async function limitedJson(request: Request, maximum: number): Promise<unknown> {
+export async function limitedJsonWithSize(
+  request: Request,
+  maximum: number,
+): Promise<{ value: unknown; sizeBytes: number }> {
   if (Number(request.headers.get("content-length") ?? 0) > maximum)
     throw new Error("body too large");
   const reader = request.body?.getReader();
@@ -21,5 +24,12 @@ export async function limitedJson(request: Request, maximum: number): Promise<un
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown;
+  return {
+    value: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown,
+    sizeBytes: size,
+  };
+}
+
+export async function limitedJson(request: Request, maximum: number): Promise<unknown> {
+  return (await limitedJsonWithSize(request, maximum)).value;
 }

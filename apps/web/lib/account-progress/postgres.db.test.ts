@@ -28,6 +28,7 @@ import { prepareCredentialIssuer } from "@/lib/certificates/credential";
 import { readCertificateName, saveCertificateName } from "@/lib/certificates/name-store";
 import { findCertificate, issueCertificate } from "@/lib/certificates/store";
 import { connectionConfig } from "@/lib/db/connection.mjs";
+import { assessmentSubmissionCost, consumeAssessmentQuota } from "@/lib/assessment/rate-limit";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@asgardeo/nextjs/server", () => ({ asgardeo: vi.fn() }));
@@ -66,7 +67,7 @@ function testDatabaseUrl(value: string): string {
 }
 
 const resetTables = (sql: postgres.Sql) =>
-  sql`DROP TABLE IF EXISTS certificate_names, certificate_signing_keys, certificates, assessment_attempts,
+  sql`DROP TABLE IF EXISTS assessment_rate_limits, certificate_names, certificate_signing_keys, certificates, assessment_attempts,
       command_stats, device_activity, revealed_hints, last_lessons,
       seen_releases, practice_completions, challenge_completions, lesson_completions,
       completion_attempts, users,
@@ -146,6 +147,39 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         expect((failed as { stderr: string }).stderr).not.toContain(url);
       } finally {
         await rm(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("assessment rate limits", () => {
+    it("shares atomic attempt quotas across concurrent requests and isolates accounts", async () => {
+      vi.stubEnv("GITDOJO_ASSESSMENT_CREATE_MAX", "2");
+      vi.stubEnv("GITDOJO_ASSESSMENT_RATE_LIMIT_WINDOW_SECONDS", "60");
+      try {
+        const learner = identity("quota-learner");
+        const results = await Promise.all(
+          Array.from({ length: 12 }, () => consumeAssessmentQuota(learner, "create")),
+        );
+        expect(results.filter((result) => result === null)).toHaveLength(2);
+        expect(results.filter((result) => result === 60)).toHaveLength(10);
+        expect(await consumeAssessmentQuota(identity("another-learner"), "create")).toBeNull();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it("charges submissions by their received payload size", async () => {
+      vi.stubEnv("GITDOJO_ASSESSMENT_SUBMIT_MAX", "48");
+      vi.stubEnv("GITDOJO_ASSESSMENT_RATE_LIMIT_WINDOW_SECONDS", "60");
+      try {
+        const learner = identity("large-evidence-learner");
+        expect(assessmentSubmissionCost(1)).toBe(1);
+        expect(assessmentSubmissionCost(64 * 1024 + 1)).toBe(2);
+        expect(assessmentSubmissionCost(3 * 1024 * 1024)).toBe(48);
+        expect(await consumeAssessmentQuota(learner, "submit", 36)).toBeNull();
+        expect(await consumeAssessmentQuota(learner, "submit", 13)).toBe(60);
+      } finally {
+        vi.unstubAllEnvs();
       }
     });
   });

@@ -4,6 +4,8 @@ import { getVerifiedIdentity } from "@/lib/auth/identity";
 import { isSameOriginRequest } from "@/lib/http/same-origin";
 import { createAttempt } from "@/lib/assessment/store";
 import { CAPSTONE_CRITERIA } from "@/lib/assessment/rubric";
+import { consumeAssessmentQuota } from "@/lib/assessment/rate-limit";
+import { rateLimitedResponse } from "@/lib/http/rate-limit";
 
 export const runtime = "nodejs";
 const PRIVATE = { "Cache-Control": "private, no-store" };
@@ -16,6 +18,8 @@ export async function POST(request: Request) {
   if (auth.status !== "verified")
     return Response.json({ error: auth.status }, { status: 401, headers: PRIVATE });
   try {
+    const retryAfter = await consumeAssessmentQuota(auth.identity, "create");
+    if (retryAfter !== null) return rateLimitedResponse(retryAfter);
     const attempt = await createAttempt(auth.identity);
     return Response.json(
       {
