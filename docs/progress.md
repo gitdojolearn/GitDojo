@@ -202,12 +202,26 @@ version 1 had no challenges). On the first load:
 4. Once the result is safely in IndexedDB, the legacy entry is removed. If IndexedDB is
    unavailable it is left alone, since it is still the only saved copy.
 
-## Export and reset
+## Backup, restore and reset
+
+- **JSON progress backup** (dashboard → Your data → "Download JSON backup") downloads a
+  versioned `gitdojo-progress-YYYY-MM-DD.json` file. It contains learner progress, not account
+  identifier, credentials, workspaces or playground files. It includes an opaque device id so
+  imported activity can sync idempotently. Keep the file somewhere safe; anyone with it can read
+  the included progress.
+- **Restore from backup** accepts a GitDojo JSON backup up to 2 MB and merges it into the current
+  browser or account. Current completion records win for duplicate items; imported activity
+  counters take the higher value rather than adding, so importing the same file again is safe.
+  Unknown content ids and malformed entries are skipped. For a signed-in learner, imported
+  completions and activity are sent through the normal account sync. The server remains the
+  source of truth for assessed completions and account XP.
+- A JSON backup includes this browser's counters only. Account totals from other devices are not
+  exported as though they belonged to this device. A learner can download the backup before
+  clearing browser data, then import it after signing in or on another device.
 
 - **PDF progress report** (dashboard → Your data → "Export PDF report") downloads
-  `gitdojo-progress-YYYY-MM-DD.pdf`, named after the learner's local export day. It replaces the
-  JSON download the dashboard used to offer; `exportProgress` in `@gitdojo/progress` still
-  produces that JSON shape for code and tests, but no button offers it.
+  `gitdojo-progress-YYYY-MM-DD.pdf`, named after the learner's local export day. The PDF is for
+  reading or sharing; it cannot be imported to restore progress. Use the JSON backup for recovery.
   - **What it shows.** `buildProgressReport` (`@gitdojo/progress`) builds the report from the
     same progress and catalog as the dashboard (counters include the account's other devices):
     an overview with a plain summary and totals, every course with completed / total lessons and
@@ -240,7 +254,8 @@ version 1 had no challenges). On the first load:
 
 Progress is keyed by owner (`ownerKey`): `anonymous`, or `account:<id>` for a signed-in learner.
 Signing in creates a separate record rather than replacing the anonymous one, and anonymous
-progress is never uploaded or merged into an account.
+progress is never uploaded or merged into an account automatically. A learner can explicitly
+merge it by restoring a JSON backup while signed in.
 
 The certificate name is a separate account setting, entered on `/account` and stored in
 PostgreSQL. It is not inferred from the identity-provider profile or learning-progress data.
@@ -254,9 +269,10 @@ stored in progress records.
 
 - A change made in the last moment before a tab closes can be lost if its transaction has not
   committed yet.
-- Anonymous progress stays in this browser. It is never uploaded or merged into an account, and
-  signed-in learners get a separate per-account record here.
+- Anonymous progress stays in this browser until a learner imports a JSON backup into their
+  signed-in account; signing in alone does not merge it automatically. The account receives
+  imported completions and this browser's activity through normal sync.
 - Completions of content that has since been removed still count towards "Lessons completed"
   and earn whatever XP they earned, but not towards any course's progress.
-- Progress is per browser profile; clearing site data removes it. The PDF report is a record of
-  progress, not a backup: it cannot be imported to restore progress.
+- Progress is per browser profile; clearing site data removes it unless the learner first
+  downloads a JSON backup. PDF reports remain non-restorable.

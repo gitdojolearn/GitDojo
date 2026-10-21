@@ -21,6 +21,7 @@ import {
   NewerProgressVersionError,
   parseLegacyProgress,
   parseProgress,
+  parseProgressExport,
   PROGRESS_SCHEMA_VERSION,
   ProgressRepository,
   recentActivity,
@@ -508,6 +509,19 @@ describe("ProgressRepository", () => {
     expect(progress.xp).toBe(50);
   });
 
+  it("clears a deleted account cache without changing its owner or device id", async () => {
+    const owner = { kind: "account" as const, accountId: "learner" };
+    const tab = repository({ owner });
+    const initial = await tab.load();
+    await tab.apply(lesson("git-init", "interactive", "git-basics"));
+    const cleared = await tab.clear();
+    expect(cleared.owner).toEqual(owner);
+    expect(cleared.deviceId).toBe(initial.progress.deviceId);
+    expect(cleared.completedLessons).toEqual({});
+    expect(cleared.xp).toBe(0);
+    expect((await repository({ owner }).load()).progress.xp).toBe(0);
+  });
+
   it("keeps anonymous progress and each account's progress apart", async () => {
     const anonymous = repository();
     await anonymous.load();
@@ -745,12 +759,64 @@ describe("export", () => {
       progress: { schemaVersion: PROGRESS_SCHEMA_VERSION, xp: 50 },
     });
     expect(JSON.parse(JSON.stringify(data))).toEqual(data);
+    expect(data.progress.owner).toEqual({ kind: "anonymous" });
+    expect(data.progress.deviceId).toBe(progress.deviceId);
     expect(exportFileName(Date.UTC(2026, 9, 4))).toBe("gitdojo-progress-2026-10-04.json");
+  });
+
+  it("parses a portable backup and rejects an unsupported envelope", () => {
+    const progress = reduce([lesson("git-init", "interactive")]);
+    const parsed = parseProgressExport(exportProgress(progress, T0), T0 + 1);
+    expect(parsed.progress.owner).toEqual({ kind: "anonymous" });
+    expect(parsed.progress.deviceId).toBe(progress.deviceId);
+    expect(parsed.progress.completedLessons["git-init"]).toEqual(
+      progress.completedLessons["git-init"],
+    );
+    expect(() => parseProgressExport({ format: "other", exportVersion: 1 }, T0)).toThrow(
+      /not supported/,
+    );
   });
 
   it("never contains credentials", () => {
     const json = JSON.stringify(exportProgress(emptyProgress(T0), T0));
     expect(json).not.toMatch(/token|password|secret/i);
+  });
+});
+
+describe("progress restore", () => {
+  it("merges repeatably, keeps current completions and profile metadata", () => {
+    const current = reduce([
+      lesson("git-init", "interactive"),
+      { type: "command", command: "commit", ok: true },
+    ]);
+    const source = reduce([
+      lesson("git-init", "interactive"),
+      lesson("git-branch", "interactive"),
+      { type: "command", command: "commit", ok: true },
+      { type: "command", command: "status", ok: true },
+      { type: "playground-session" },
+    ]);
+    const account = { ...current, owner: { kind: "account" as const, accountId: "account-id" } };
+    const restored = applyProgressAction(
+      account,
+      { type: "restore", snapshot: source, includeCounters: true },
+      T0 + 10,
+    );
+    expect(restored.owner).toEqual(account.owner);
+    expect(restored.deviceId).toBe(account.deviceId);
+    expect(restored.completedLessons["git-init"]).toEqual(current.completedLessons["git-init"]);
+    expect(restored.completedLessons["git-branch"]).toBeDefined();
+    expect(restored.commandStats.commit).toMatchObject({ uses: 1 });
+    expect(restored.commandStats.status).toMatchObject({ uses: 1 });
+    expect(restored.playgroundSessions).toBe(1);
+    const repeated = applyProgressAction(
+      restored,
+      { type: "restore", snapshot: source, includeCounters: true },
+      T0 + 20,
+    );
+    expect(repeated.commandStats).toEqual(restored.commandStats);
+    expect(repeated.playgroundSessions).toBe(restored.playgroundSessions);
+    expect(repeated.xp).toBe(restored.xp);
   });
 });
 

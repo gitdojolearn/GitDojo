@@ -6,6 +6,7 @@ import {
   contentKey,
   createMemoryStorage,
   indexLessons,
+  totalXp,
   ProgressRepository,
   type ContentRef,
   type LocalProgress,
@@ -110,6 +111,7 @@ let syncing: Promise<void> | null = null;
 let dirty = false;
 let retryDelay = 0;
 let onlineListener: (() => void) | null = null;
+let deletingAccount = false;
 /**
  * The notice the activity sync put up, if any. Completion uploads and the initial load report
  * through the same notice, so the sync only ever clears its own: a recovered sync must not
@@ -191,6 +193,7 @@ const SYNCED_ACTIONS = new Set<ProgressAction["type"]>([
   "visit-lesson",
   "playground-session",
   "see-release",
+  "restore",
 ]);
 
 /** How long to wait before uploading, so a burst of commands becomes one request. */
@@ -199,7 +202,19 @@ const SYNC_DEBOUNCE_MS = 3_000;
 const RETRY_DELAYS_MS = [5_000, 15_000, 60_000];
 
 function syncEnabled(): boolean {
-  return useProgressStore.getState().mode !== "anonymous";
+  if (deletingAccount || useProgressStore.getState().mode === "anonymous") return false;
+  const owner = useProgressStore.getState().progress?.owner;
+  if (owner?.kind !== "account" || typeof localStorage === "undefined") return true;
+  try {
+    return localStorage.getItem(`gitdojo:deleted-account:${owner.accountId}`) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+function cancelScheduledSync(): void {
+  if (syncTimer !== null) clearTimeout(syncTimer);
+  syncTimer = null;
 }
 
 /**
@@ -414,6 +429,135 @@ export function recordReleaseSeen(version: string): Promise<void> {
   return recordProgress({ type: "see-release", version });
 }
 
+export type RestoreProgressResult = "ok" | "activity-sync-failed" | "not-ready";
+
+/** Merges a portable backup. Account transfers sync imported activity as its original device. */
+export async function restoreProgressBackup(
+  snapshot: LocalProgress,
+): Promise<RestoreProgressResult> {
+  const state = useProgressStore.getState();
+  if (!state.progress || !state.catalog || !repository || state.status !== "ready") {
+    return "not-ready";
+  }
+  const imported = sanitizeBackup(snapshot, state.catalog);
+  const accountMode = state.mode === "account";
+  const sameDevice = imported.deviceId === state.progress.deviceId;
+  await recordProgress({
+    type: "restore",
+    snapshot: imported,
+    includeCounters: !accountMode || sameDevice,
+  });
+
+  if (accountMode) {
+    const activitySnapshot = sameDevice
+      ? (useProgressStore.getState().progress ?? imported)
+      : imported;
+    const activity = await syncAccountActivity(activitySnapshot, accountFetch);
+    if (activity.status !== "ok") return "activity-sync-failed";
+    await syncCompletionsNow();
+    await syncNow();
+  }
+  return "ok";
+}
+
+function sanitizeBackup(snapshot: LocalProgress, catalog: ProgressCatalog): LocalProgress {
+  const lessonIndex = indexLessons(catalog);
+  const completedLessons = Object.fromEntries(
+    Object.entries(snapshot.completedLessons).flatMap(([id, record]) => {
+      const lesson = lessonIndex.get(id);
+      if (!lesson) return [];
+      return [
+        [
+          id,
+          {
+            completedAt: record.completedAt,
+            type: lesson.type,
+            xp: completionXp({ kind: "lesson", id, type: lesson.type }),
+            ...(lesson.course ? { courseId: lesson.course.id } : {}),
+            ...(record.migrated ? { migrated: true as const } : {}),
+          },
+        ],
+      ];
+    }),
+  );
+  const challengeIds = new Set(catalog.challenges.map((challenge) => challenge.id));
+  const practiceIds = new Set(catalog.practice.map((task) => task.id));
+  const completedChallenges = Object.fromEntries(
+    Object.entries(snapshot.completedChallenges)
+      .filter(([id]) => challengeIds.has(id))
+      .map(([id, record]) => [
+        id,
+        { ...record, type: "challenge" as const, xp: completionXp({ kind: "challenge", id }) },
+      ]),
+  );
+  const completedPractice = Object.fromEntries(
+    Object.entries(snapshot.completedPractice)
+      .filter(([id]) => practiceIds.has(id))
+      .map(([id, record]) => [id, { ...record, xp: 0 }]),
+  );
+  const commandStats = Object.fromEntries(
+    Object.entries(snapshot.commandStats).filter(([command]) =>
+      /^[a-z][a-z-]{0,31}$/.test(command),
+    ),
+  );
+  const normalized = {
+    ...snapshot,
+    owner: ANONYMOUS,
+    completedLessons,
+    completedChallenges,
+    completedPractice,
+    commandStats,
+    xp: totalXp({ completedLessons, completedChallenges }),
+  };
+  delete normalized.remoteCounters;
+  delete normalized.syncedAt;
+  return normalized;
+}
+
+/** Stop scheduled writes while the account deletion request is in flight. */
+export async function prepareForAccountDeletion(): Promise<void> {
+  deletingAccount = true;
+  cancelScheduledSync();
+  if (syncing) await syncing;
+  // A failed in-flight request may have scheduled a retry while it was finishing.
+  cancelScheduledSync();
+}
+
+/** Resume account sync when the server could not complete a deletion request. */
+export function resumeAfterAccountDeletion(): void {
+  deletingAccount = false;
+  if (dirty) void syncNow();
+}
+
+/** Remove this account's browser cache only after the server confirms deletion. */
+export async function clearProgressAfterAccountDeletion(): Promise<void> {
+  cancelScheduledSync();
+  dirty = false;
+  deletingAccount = true;
+  syncNotice = null;
+  const owner = useProgressStore.getState().progress?.owner;
+  if (owner?.kind === "account" && typeof localStorage !== "undefined") {
+    try {
+      localStorage.setItem(`gitdojo:deleted-account:${owner.accountId}`, "1");
+    } catch {
+      // The in-memory guard still protects this tab if browser storage is unavailable.
+    }
+  }
+  if (onlineListener && typeof window !== "undefined") {
+    window.removeEventListener("online", onlineListener);
+  }
+  onlineListener = null;
+  if (!repository || useProgressStore.getState().mode !== "account") return;
+  const progress = await repository.clear();
+  useProgressStore.setState({
+    progress,
+    sync: "off",
+    syncedAt: null,
+    accountNotice: null,
+    saveError: null,
+  });
+}
+
 /**
  * Whether the learner has seen a release's announcement, from whoever's progress is loaded.
  * `null` until saved progress has been read, so callers can wait rather than guess.
@@ -617,6 +761,7 @@ export function resetProgressStoreForTests(): void {
   syncTimer = null;
   syncing = null;
   dirty = false;
+  deletingAccount = false;
   retryDelay = 0;
   syncNotice = null;
   if (onlineListener && typeof window !== "undefined") {

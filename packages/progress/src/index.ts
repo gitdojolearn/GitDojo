@@ -12,6 +12,7 @@ export {
   EXPORT_VERSION,
   exportFileName,
   exportProgress,
+  parseProgressExport,
   type ProgressExport,
 } from "./export";
 export {

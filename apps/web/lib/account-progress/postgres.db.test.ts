@@ -5,7 +5,7 @@
 // dedicated test database (its name contains "test"): GitDojo's tables there are dropped and
 // migrated from scratch on every run.
 import { execFile } from "node:child_process";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,6 +23,7 @@ import { createPostgresProgressStore, insertCompletion, upsertUser } from "./pos
 import { ADA, ADA_ELSEWHERE, apiDeps, GRACE, postLesson, postSync } from "./testing";
 import { revokeCertificate } from "../../scripts/certificate-revocation.mjs";
 import { AWARDS } from "@/lib/certificates/awards";
+import { deleteAccountData } from "@/lib/account-deletion/store";
 import { prepareCredentialIssuer } from "@/lib/certificates/credential";
 import { readCertificateName, saveCertificateName } from "@/lib/certificates/name-store";
 import { findCertificate, issueCertificate } from "@/lib/certificates/store";
@@ -627,6 +628,60 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
         SELECT count(*)::int AS count FROM users WHERE subject = ${newcomer.subject}
       `;
       expect(row?.count).toBe(1);
+    });
+  });
+
+  describe("account deletion", () => {
+    it("deletes account rows and anonymizes revoked certificates", async () => {
+      const learner = identity(`delete-${randomUUID()}`);
+      const userId = await upsertUser(sql, learner);
+      await sql`
+        INSERT INTO lesson_completions (user_id, lesson_id, lesson_type, xp)
+        VALUES (${userId}, 'git-init', 'interactive', 50)
+      `;
+      const [attempt] = await sql<{ id: string }[]>`
+        INSERT INTO assessment_attempts (
+          user_id, assessment_key, rubric_version, nonce, status, submitted_at, result, evidence
+        ) VALUES (
+          ${userId}, 'git-recovery', 1, ${randomUUID()}, 'passed', now(), '{}', '{}'
+        ) RETURNING id
+      `;
+      if (!attempt) throw new Error("assessment attempt was not inserted");
+      const [certificate] = await sql<{ id: string }[]>`
+        INSERT INTO certificates (
+          user_id, award_key, credential_kind, criteria_version, recipient_name,
+          public_name_consent, evidence, assessment_attempt_id
+        ) VALUES (
+          ${userId}, 'git-recovery', 'assessed', 1, 'Learner Name', true, '{}', ${attempt.id}
+        ) RETURNING id
+      `;
+      if (!certificate) throw new Error("certificate was not inserted");
+
+      await deleteAccountData(learner);
+
+      expect(
+        await sql`SELECT id FROM users WHERE issuer = ${learner.issuer} AND subject = ${learner.subject}`,
+      ).toHaveLength(0);
+      expect(
+        await sql`SELECT user_id FROM lesson_completions WHERE user_id = ${userId}`,
+      ).toHaveLength(0);
+      expect(await sql`SELECT id FROM assessment_attempts WHERE id = ${attempt.id}`).toHaveLength(
+        0,
+      );
+      const [retained] = await sql`
+        SELECT user_id, recipient_name, public_name_consent, assessment_attempt_id,
+               revoked_at, revocation_reason
+        FROM certificates WHERE id = ${certificate.id}
+      `;
+      if (!retained) throw new Error("certificate tombstone was not retained");
+      expect(retained).toMatchObject({
+        user_id: null,
+        recipient_name: "Deleted learner",
+        public_name_consent: false,
+        assessment_attempt_id: null,
+        revocation_reason: "Learner deleted their GitDojo account",
+      });
+      expect(retained.revoked_at).not.toBeNull();
     });
   });
 
