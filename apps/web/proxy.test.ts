@@ -85,8 +85,14 @@ describe("proxy", () => {
   it("refreshes sessions for the progress API without redirecting it", async () => {
     expect(config.matcher).toContain("/api/progress/:path*");
     expect(config.matcher).toContain("/api/attempts/:path*");
+    expect(config.matcher).toContain("/api/assessment/attempts/:path*");
     configure();
-    for (const path of ["/api/progress", "/api/progress/lessons"]) {
+    for (const path of [
+      "/api/progress",
+      "/api/progress/lessons",
+      "/api/assessment/attempts",
+      "/api/assessment/attempts/123/submit",
+    ]) {
       expect((await proxy(request(path))).headers.get("x-proxy")).toBe("next");
     }
     // Signed-out API requests reach the route, which answers 401 itself.
