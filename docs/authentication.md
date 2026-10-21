@@ -156,23 +156,74 @@ at 4.5:1), text `#F4F7FB`, font Inter. Preview, then publish.
 "Sign in with GitHub" then appears on the hosted sign-in page. GitDojo does not show its own
 GitHub button, so nothing is advertised that the organization has not configured.
 
-## Manual smoke test
+## Staging identity-provider verification
 
-With a configured tenant and a test user (or one you register):
+Run this checklist against the stable **staging** URL after the first deployment, after changing
+the WSO2 application or tenant configuration, and before publishing a release that changes
+authentication. It supplements (and does not replace) the automated mock-provider tests and the
+read-only deployment smoke test in [deployment.md](./deployment.md#smoke-tests). Do not use a
+production learner account. Use a dedicated staging test account and the staging WSO2 application.
 
-1. Open a lesson anonymously (e.g. `/learn/git-basics/what-is-git`) and mark it complete.
-2. Click **Create account** in the header, then **Create account** on `/sign-up`; on the WSO2
-   page choose **Register** and create a test account.
-3. Complete email verification if your organization requires it.
-4. Sign in; you return to the lesson you started from, and the header shows your name.
-5. Reload: you are still signed in. `/account` shows your profile.
-6. Open the account menu and choose **Sign out**; you pass through WSO2's sign-out and land on
-   "You're signed out".
-7. The lesson is still marked complete, the dashboard shows the same XP, and the playground
-   repository is still there.
+### Before you start
 
-Also worth checking: cancel on the WSO2 page (you get "Sign-in was cancelled"), and open
-`/account` while signed out (you are asked to sign in and then returned to it).
+- [ ] Confirm the staging WSO2 application has the exact staging callback and signed-out URLs
+      listed in [deployment.md](./deployment.md#wso2-applications), and its allowed origin is the
+      staging origin.
+- [ ] Confirm its client ID and secret, organization URL, and session secret are configured in
+      the staging Vercel project's **Production** environment. Do not copy values into notes, issue
+      comments, screenshots, or terminal commands.
+- [ ] Confirm `/api/health` reports `database: "ok"` and the deployment smoke test passes.
+- [ ] Have access to a dedicated test mailbox if email verification is enabled. Use a unique
+      staging test address; do not use a real learner's account.
+- [ ] Open a private browser window and start signed out. Keep the browser's address bar visible
+      during redirects, but never capture passwords, one-time codes, tokens, cookies, or verification
+      links in screenshots or logs.
+
+### Registration and email verification
+
+- [ ] Visit `/sign-up` and follow **Create account** to the WSO2 hosted page. Confirm the page
+      offers registration when self-registration is enabled.
+- [ ] Register the dedicated test user. Confirm the browser stays on the WSO2 host while entering
+      credentials; GitDojo must not collect a password.
+- [ ] If email verification is enabled, complete it from the test mailbox. Confirm the account can
+      then sign in. If verification is disabled, record that this check was not applicable.
+- [ ] Confirm the hosted sign-in and registration pages show the published GitDojo or organization
+      branding configured for staging (logo, colors, and favicon where displayed).
+
+### Sign-in, return path, and session
+
+- [ ] In a fresh private window, open `/learn/git-basics/what-is-git`, then choose **Sign in** in
+      the header. Sign in through the hosted page and confirm the callback returns to that lesson.
+- [ ] Confirm the header shows the signed-in account and `/account` displays the expected profile.
+- [ ] Reload `/account`; confirm the session remains signed in. Open `/api/auth/session` and confirm
+      it reports `signed-in` without exposing tokens or cookie data.
+- [ ] Open `/account` in a separate signed-out private window. Confirm it redirects through sign-in
+      and returns to `/account` after successful authentication.
+- [ ] Start sign-in and cancel on the WSO2 page. Confirm GitDojo returns to `/sign-in` with the
+      cancellation message and does not expose provider error details.
+
+### Sign-out and local learning data
+
+- [ ] In the signed-in window, complete a concept lesson and note its completion in the dashboard.
+- [ ] Use the account menu to sign out. Confirm the flow visits WSO2 logout and ends on GitDojo's
+      "You're signed out" page.
+- [ ] Confirm the header is signed out and the lesson, local dashboard progress, and playground
+      repository remain available. Signing out must not erase anonymous browser data.
+- [ ] Sign in again and confirm the account's server-synced progress appears as expected; do not
+      expect anonymous progress to merge into the account.
+
+### Registration-disabled configuration (when applicable)
+
+- [ ] If staging intentionally disables self-registration, set
+      `GITDOJO_SELF_REGISTRATION=disabled` and confirm `/sign-up` explains registration is closed.
+- [ ] Confirm the WSO2 hosted sign-in page does not offer registration. Existing test users should
+      still be able to sign in.
+
+Record only the staging URL, date, release or commit, tester, pass/fail for each applicable
+section, and sanitized failure details. Never record user identifiers, email addresses, secrets,
+session contents, one-time codes, or verification links. A failed check blocks release sign-off
+until it is fixed or explicitly accepted by the release owner. Restore the intended registration
+setting after testing if it was changed.
 
 ## Tests
 
@@ -196,14 +247,14 @@ Also worth checking: cancel on the WSO2 page (you get "Sign-in was cancelled"), 
   test-only values, in CI too; no secrets are needed.
 
 The mock provider is not WSO2: tenant settings, hosted page behavior, registration, email
-verification and branding still need the manual smoke test above.
+verification and branding require the staging verification above.
 
 ## Known limitations
 
-- Browser progress is not linked to accounts or synced across devices yet; the server-side
-  progress API ([account-progress.md](./account-progress.md)) is not used by the UI yet.
 - "Create account" cannot open the registration form directly; learners choose **Register** on
   the hosted page.
+- The local mock provider in CI cannot verify the live WSO2 tenant configuration or hosted-page
+  behavior. Those checks require the dedicated staging verification above.
 - The SDK keeps the access and refresh tokens inside its signed (not encrypted) httpOnly session
   cookie. Scripts cannot read it, but use HTTPS in production (the cookie is `Secure` there).
 - Sign-out returns through WSO2's logout endpoint; if WSO2 cannot be reached, the local session is

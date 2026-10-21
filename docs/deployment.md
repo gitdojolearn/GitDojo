@@ -221,10 +221,12 @@ Protect `main` with the rulesets in [ci.md](./ci.md#repository-settings).
 5. Merge this configuration to `main`. CI runs; when it passes, **Release** migrates and deploys
    staging, then opens a draft under **GitHub → Releases**. Without staging settings, the release
    workflow reports which values are missing; production is never deployed.
-6. Check staging by hand, write the learner highlights in the draft release notes
-   ([release-notes.md](./release-notes.md)), then click **Publish release**. This is your
-   approval. GitHub starts **Publish release**, which checks the highlights and deploys the
-   approved tag to production.
+6. Check staging by hand, including the
+   [identity-provider verification](./authentication.md#staging-identity-provider-verification)
+   when authentication or tenant configuration changed. Write the learner highlights in the
+   draft release notes ([release-notes.md](./release-notes.md)), then click **Publish release**.
+   This is your approval. GitHub starts **Publish release**, which checks the highlights and
+   deploys the approved tag to production.
 7. After the production smoke test passes, the app shows a small release banner throughout the
    site until each learner opens **What’s new** or dismisses it. **What’s new** shows the version,
    date and only the learner highlights; the generated changelog stays on GitHub.
@@ -250,9 +252,10 @@ node apps/web/scripts/smoke.mjs https://staging.<your-domain> --expect-accounts 
 | `POST /api/progress/lessons` from another origin                                                           | 403 `cross_origin`                                  |
 | `POST /api/progress/sync` from another origin                                                              | 403 `cross_origin`                                  |
 
-Manually, after the first release and after changes to accounts or progress, on staging:
+Manually, on staging after the first deployment and before publishing a release that changes
+authentication or its WSO2 tenant configuration:
 
-- [ ] Sign in; you return to the page you started from.
+- [ ] Complete the [staging identity-provider verification](./authentication.md#staging-identity-provider-verification), including registration/email verification when enabled, hosted-page branding, sign-in return path, session persistence, sign-out, and local progress preservation.
 - [ ] Finish a concept lesson; the dashboard shows its XP.
 - [ ] In a private window, sign in again: the same lesson and XP appear.
 - [ ] Sign out; the browser's anonymous progress is shown again.
