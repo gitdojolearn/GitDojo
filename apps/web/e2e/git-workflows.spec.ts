@@ -88,3 +88,29 @@ test("tags a release and shows the tag in the graph", async ({ page, isMobile })
   await show(page, "Graph", isMobile);
   await expect(page.locator('[data-testid="tag-label"][data-tag="v1.0"]')).toBeVisible();
 });
+
+test("moves a tracked file and completes the rename lesson", async ({ page, isMobile }) => {
+  await page.goto("/learn/everyday-git/git-mv");
+  await waitForTerminal(page, isMobile);
+  const terminal = page.getByTestId("terminal");
+  await run(page, "git show HEAD");
+  await expect(terminal).toContainText("Add meeting notes");
+  await expect(terminal).toContainText("diff --git a/notes.txt b/notes.txt");
+  await run(page, "git mv notes.txt docs/notes.md");
+  await run(page, "git status");
+  await expect(terminal).toContainText("new file:   docs/notes.md");
+  await expect(terminal).toContainText("deleted:    notes.txt");
+  await run(page, 'git commit -m "Move notes into docs"');
+  await expect(page.getByRole("dialog")).toContainText("Lesson Complete");
+});
+
+test("amends the latest local commit and completes the amend lesson", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto("/learn/everyday-git/git-commit-amend");
+  await waitForTerminal(page, isMobile);
+  await run(page, "git add login.css");
+  await run(page, 'git commit --amend -m "Add login form with validation"');
+  await expect(page.getByRole("dialog")).toContainText("Lesson Complete");
+});

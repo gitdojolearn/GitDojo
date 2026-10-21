@@ -62,7 +62,20 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
   add: (parsed, { git }) => git.add(parsed.args),
   commit: (parsed, { git }) => {
     const message = parsed.flags.m;
-    return git.commit({ message: typeof message === "string" ? message : "" });
+    const amend = parsed.flags.amend === true;
+    if (parsed.flags["no-edit"] === true && !amend) {
+      return invalidArgument("fatal: --no-edit requires --amend");
+    }
+    if (amend && typeof message !== "string" && parsed.flags["no-edit"] !== true) {
+      return invalidArgument(
+        "error: GitDojo does not open an editor; use -m <message> or --no-edit",
+      );
+    }
+    return git.commit({
+      message: typeof message === "string" ? message : "",
+      amend,
+      noEdit: parsed.flags["no-edit"] === true,
+    });
   },
   log: (parsed, { git }) => {
     const [revision] = parsed.args;
@@ -72,6 +85,8 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
       ...(revision === undefined ? {} : { revision }),
     });
   },
+  show: (parsed, { git }) => git.show(parsed.args[0]),
+  mv: (parsed, { git }) => git.mv(parsed.args),
   branch: (parsed, { git }) => {
     const [name, startPoint] = parsed.args;
     const remove = parsed.flags.d === true || parsed.flags.D === true;

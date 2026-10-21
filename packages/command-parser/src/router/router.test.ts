@@ -44,6 +44,51 @@ describe("command router", () => {
     );
   });
 
+  it("amends the current commit from the terminal without opening an editor", async () => {
+    await runCommandLine("git init", context);
+    await runCommandLine("git add README.md", context);
+    await runCommandLine('git commit -m "Initial commit"', context);
+    await files.writeFile(WORKSPACE, "README.md", "# Updated\n");
+    await runCommandLine("git add README.md", context);
+
+    const amended = await runCommandLine('git commit --amend -m "Update README"', context);
+    expect(amended).toMatchObject({ ok: true, gitCommand: "commit" });
+    expect((await runCommandLine("git log --oneline", context)).output).toMatch(
+      /^[0-9a-f]{7} \(HEAD -> main\) Update README$/,
+    );
+    expect(await runCommandLine("git commit --amend --no-edit", context)).toMatchObject({
+      ok: true,
+      gitCommand: "commit",
+    });
+  });
+
+  it("moves a tracked file and stages both sides through git mv", async () => {
+    await runCommandLine("git init", context);
+    await runCommandLine("git add README.md", context);
+    await runCommandLine('git commit -m "Initial commit"', context);
+
+    expect(await runCommandLine("git mv README.md docs/README.md", context)).toMatchObject({
+      ok: true,
+      gitCommand: "mv",
+    });
+    const status = (await runCommandLine("git status", context)).output;
+    expect(status).toContain("new file:   docs/README.md");
+    expect(status).toContain("deleted:    README.md");
+  });
+
+  it("routes git show to a commit patch", async () => {
+    await runCommandLine("git init", context);
+    await runCommandLine("git add README.md", context);
+    await runCommandLine('git commit -m "Initial commit"', context);
+    await files.writeFile(WORKSPACE, "README.md", "# Updated\n");
+    await runCommandLine("git add README.md", context);
+    await runCommandLine('git commit -m "Update README"', context);
+
+    const shown = await runCommandLine("git show HEAD", context);
+    expect(shown).toMatchObject({ ok: true, gitCommand: "show" });
+    expect(shown.output).toContain("diff --git a/README.md b/README.md");
+  });
+
   it("runs the branching flow end to end", async () => {
     await runCommandLine("git init", context);
     expect((await runCommandLine("git branch feature/login", context)).output).toBe(
@@ -187,7 +232,7 @@ describe("command router", () => {
       clearScreen: true,
     });
     const help = await runCommandLine("help", context);
-    expect(help.output).toContain('git commit -m "<message>"');
+    expect(help.output).toContain('git commit [-m "<message>"] [--amend [--no-edit]]');
   });
 
   it("never rejects when the engine throws unexpectedly", async () => {

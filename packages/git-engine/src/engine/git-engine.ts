@@ -120,6 +120,10 @@ export interface GitLogOptions {
 
 export interface GitCommitInput {
   message: string;
+  /** Replace the current branch's tip while preserving its original author and parents. */
+  amend?: boolean;
+  /** Reuse the existing message when amending (or when concluding a merge). */
+  noEdit?: boolean;
   author?: GitAuthor;
   /** Seconds since the Unix epoch. Defaults to now; lesson setup back-dates its commits. */
   timestamp?: number;
@@ -476,6 +480,12 @@ export type GitStatusResult = GitCommandResult<GitStatusData>;
 export type GitAddResult = GitCommandResult<GitAddData>;
 export type GitCommitResult = GitCommandResult<GitCommitData>;
 export type GitLogResult = GitCommandResult<GitLogData>;
+export interface GitShowData {
+  commit: GitCommitInfo;
+  files: GitFileDiff[];
+}
+export type GitShowResult = GitCommandResult<GitShowData>;
+export type GitMvResult = GitCommandResult<{ source: string; destination: string }>;
 export type GitBranchListResult = GitCommandResult<GitBranchListData>;
 export type GitBranchCreateResult = GitCommandResult<GitBranchCreateData>;
 export type GitSwitchResult = GitCommandResult<GitSwitchData>;
@@ -520,6 +530,10 @@ export interface GitEngine {
   add(paths: string[]): Promise<GitAddResult>;
   commit(input: GitCommitInput): Promise<GitCommitResult>;
   log(options?: GitLogOptions): Promise<GitLogResult>;
+  /** `git show [<commit> | <commit>:<path>]`: one commit and its first-parent diff or file. */
+  show(spec?: string): Promise<GitShowResult>;
+  /** `git mv <source> <destination>` stages a tracked-file rename. */
+  mv(paths: string[]): Promise<GitMvResult>;
   /** `git branch [-r | -a] [-v]`: prints the branch list, marking the current branch with `*`. */
   showBranches(options?: GitShowBranchesOptions): Promise<GitBranchListResult>;
   /** `git branch <name> [<start-point>]`: creates a branch (at HEAD by default) without switching. */

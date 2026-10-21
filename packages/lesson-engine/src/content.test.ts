@@ -212,6 +212,11 @@ const AUTH_RESOLVED = [
 ].join("\n");
 
 const SOLUTIONS: Record<string, PlayStep[]> = {
+  "git-mv": ["git mv notes.txt docs/notes.md", 'git commit -m "Move notes into docs"'],
+  "git-commit-amend": [
+    "git add login.css",
+    'git commit --amend -m "Add login form with validation"',
+  ],
   "git-init": ["git init"],
   "git-status": [
     "git status",
@@ -543,6 +548,17 @@ const ignoring = (content: string): PlayStep => ({ write: ".gitignore", content 
  * that no rule matches at the start covers that.
  */
 const STUCK: Record<string, { stuck: PlayStep[]; resolved: PlayStep[] | "reset" }> = {
+  "git-mv/manual-move-not-staged": {
+    stuck: [
+      { write: "docs/notes.md", content: "- [ ] Prepare agenda\n- [ ] Share notes\n" },
+      { delete: "notes.txt" },
+    ],
+    resolved: ["git add .", 'git commit -m "Move notes into docs"'],
+  },
+  "git-commit-amend/message-still-old": {
+    stuck: ["git add login.css", "git commit --amend --no-edit"],
+    resolved: ['git commit --amend -m "Add login form with validation"'],
+  },
   "first-commit/readme-staged-not-committed": {
     stuck: ["git init", "git add README.md"],
     resolved: ['git commit -m "Initial commit"'],

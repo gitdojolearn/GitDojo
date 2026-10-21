@@ -41,17 +41,36 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
     return failure(gitError("UNRESOLVED_CONFLICTS", UNRESOLVED_CONFLICTS_MESSAGE));
   }
   const operation = merge ? operationKind(merge) : null;
+  const amendHead = input.amend ? await resolveRefOrNull(ctx, "HEAD") : null;
+  if (input.amend && (merge !== null || amendHead === null)) {
+    return failure(
+      gitError(
+        "INVALID_ARGUMENT",
+        merge !== null
+          ? "fatal: cannot amend a commit while an operation is in progress"
+          : "fatal: there is no commit to amend",
+      ),
+    );
+  }
   // A rebase step that was already committed has nothing left for `git commit` to conclude.
   const concluding = merge !== null && !(operation === "rebase" && merge.rebase?.current === null);
   // Concluding an operation may use its prepared message, like `git commit --no-edit`.
-  const message = input.message.trim() || (concluding ? merge.message : "");
+  const message =
+    input.message.trim() ||
+    (input.noEdit && input.amend
+      ? (
+          await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: amendHead ?? "" })
+        ).commit.message.trimEnd()
+      : concluding
+        ? merge.message
+        : "");
   if (message === "") {
     return failure(gitError("INVALID_ARGUMENT", COMMIT_MESSAGE_REQUIRED));
   }
 
   const status = await readStatusData(ctx);
   // A merge commit may record no changes of its own (e.g. every conflict resolved to our version).
-  if (operation !== "merge" && !hasStagedChanges(status.entries)) {
+  if (operation !== "merge" && !input.amend && !hasStagedChanges(status.entries)) {
     if (concluding && (operation === "cherry-pick" || operation === "revert")) {
       // Every change was resolved away: there is nothing left to pick or revert.
       await clearMergeState(ctx);
@@ -68,7 +87,12 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
   }
 
   // Cherry-picks and rebased commits keep their original author; the learner commits them.
-  const original = concluding && input.message.trim() === "" ? merge.author : undefined;
+  const amended =
+    input.amend && amendHead !== null
+      ? (await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: amendHead })).commit
+      : undefined;
+  const original =
+    amended?.author ?? (concluding && input.message.trim() === "" ? merge.author : undefined);
   const author = original ?? {
     ...(input.author ?? DEFAULT_AUTHOR),
     ...(input.timestamp === undefined ? {} : { timestamp: input.timestamp }),
@@ -80,7 +104,11 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
     message,
     author,
     ...(original ? { committer: DEFAULT_AUTHOR } : {}),
-    ...(operation === "merge" && head !== null ? { parent: [head, merge?.theirs ?? head] } : {}),
+    ...(amended
+      ? { parent: amended.parent }
+      : operation === "merge" && head !== null
+        ? { parent: [head, merge?.theirs ?? head] }
+        : {}),
   });
   if (operation === "rebase" && merge?.rebase) {
     // The stopped step is done; `git rebase --continue` replays the rest.
@@ -107,7 +135,7 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
   await logHeadMove(ctx, {
     from: head,
     to: oid,
-    message: `commit${kind}: ${subject(message)}`,
+    message: `commit${input.amend ? " (amend)" : kind}: ${subject(message)}`,
     branch,
   });
 

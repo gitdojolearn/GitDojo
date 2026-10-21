@@ -68,12 +68,15 @@ rather than a pattern match on the typed text.
 
 ## Supported commands
 
-`init`, `status`, `add`, `commit`, `log`, `branch` (with `-r`, `-a`, `-v`), `switch`, `checkout`,
+`init`, `status`, `add`, `commit` (including `--amend` and `--no-edit`), `log`, `show`, `mv`, `branch` (with `-r`, `-a`, `-v`), `switch`, `checkout`,
 `merge`, `diff`, `restore`, `rm`, `reset`, `revert`, `stash`, `cherry-pick`, `reflog`, `rebase`
 (with `-i`), `tag`, `remote`, `fetch`, `pull` and `push`. `help` in the terminal lists them with
 their usage; see [git-engine.md](./git-engine.md) for behaviour, including what the simulated
-remotes can and cannot do. `clone`, `config`, `mv` and `show` are planned: they get a "not
+remotes can and cannot do. `clone` and `config` are not implemented yet: they get a "not
 available in GitDojo yet" message.
+
+See the [hands-on command coverage matrix](./command-coverage.md) for curriculum-to-terminal
+coverage and explicit simulation limits.
 
 The router's `remote` handler accepts only listing (`git remote`, `git remote -v`); `add`,
 `remove`, `rename` and `set-url` are refused, because the sandbox has no network. `git pull`

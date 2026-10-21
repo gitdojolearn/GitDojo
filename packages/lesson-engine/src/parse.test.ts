@@ -273,8 +273,8 @@ describe("setup commands", () => {
       "setup commands must be Git commands",
     );
     expect(issuesFor(withCommands('["rm -rf ."]')).join("\n")).toContain("rm: command not found");
-    expect(issuesFor(withCommands('["git commit --amend"]')).join("\n")).toContain(
-      "unknown option '--amend'",
+    expect(issuesFor(withCommands('["git commit --unsupported-option"]')).join("\n")).toContain(
+      "unknown option '--unsupported-option'",
     );
   });
 

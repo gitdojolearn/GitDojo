@@ -278,8 +278,9 @@ the same advice applies as for [challenge tips](./challenge-authoring.md#writing
   every hands-on lesson to have at least one rule, except those listed in `NO_STUCK_STATE` (such
   as `git-init`, whose only state before the goal is the starting one).
 - **Be honest about the way out.** Some states can only be undone with commands from later
-  lessons, or not at all in GitDojo (`git commit --amend` is not available). Say so and point at
-  **Reset** rather than suggesting a command that does not work.
+  lessons. The terminal supports `git commit --amend -m <message>` and
+  `git commit --amend --no-edit` for the latest local commit, but cannot force-push rewritten
+  history. For published work, teach a new commit or `git revert`.
 
 **Challenges.** Lessons of `type: challenge` and standalone challenges
 ([challenge-authoring.md](./challenge-authoring.md#adaptive-hints)) use adaptive hints too, but no

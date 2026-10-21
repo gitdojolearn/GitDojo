@@ -35,6 +35,17 @@ describe("parseCommand", () => {
     expect(parsed("git add README.md")).toMatchObject({ command: "add", args: ["README.md"] });
   });
 
+  it("parses git show revisions and git mv paths", () => {
+    expect(parsed("git show HEAD:README.md")).toMatchObject({
+      command: "show",
+      args: ["HEAD:README.md"],
+    });
+    expect(parsed("git mv README.md docs/README.md")).toMatchObject({
+      command: "mv",
+      args: ["README.md", "docs/README.md"],
+    });
+  });
+
   it("parses git add .", () => {
     expect(parsed("git add .")).toMatchObject({ command: "add", args: ["."] });
   });

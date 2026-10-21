@@ -149,6 +149,14 @@ is queued, re-read and re-validated like a command, and while Git waits the engi
 changes (`EDITOR_OPEN`). A playground saved mid-edit aborts the rebase on the next load, as if the
 editor had quit; lessons and practice tasks are rebuilt on load anyway.
 
+The broader command surface still follows the parser → router → workspace-bound engine pipeline.
+`git show` is read-only and formats a selected commit's first-parent patch (or a file blob at
+`<commit>:<path>`); `git mv` updates the virtual working tree and stages both paths; and
+`git commit --amend` writes a replacement commit with the same parent and original author, then
+moves the current ref and records the old/new tips in the reflog. The amendment path takes an
+explicit `-m` or `--no-edit`, so it does not start another editor session. Current behavioral
+coverage and sandbox limits are tracked in [command-coverage.md](./command-coverage.md).
+
 ## Simulated remotes
 
 The sandbox has no network. Remote lessons and practice tasks get a **simulated** `origin`
