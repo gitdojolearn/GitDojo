@@ -6,7 +6,13 @@ import {
   parseLegacyProgress,
   type LegacyStorage,
 } from "./migration";
-import { ANONYMOUS, ownerKey, type LocalProgress, type ProgressOwner } from "./model";
+import {
+  ANONYMOUS,
+  emptyProgress,
+  ownerKey,
+  type LocalProgress,
+  type ProgressOwner,
+} from "./model";
 import { NewerProgressVersionError, parseProgress } from "./parse";
 import { createMemoryStorage, type ProgressStorage } from "./storage";
 
@@ -165,6 +171,21 @@ export class ProgressRepository {
   /** Learning progress only: playground repositories and other site data are untouched. */
   reset(): Promise<LocalProgress> {
     return this.apply({ type: "reset" });
+  }
+
+  /** Clears this owner's browser cache after a confirmed account deletion. */
+  clear(): Promise<LocalProgress> {
+    return this.enqueue(async () => {
+      const current = await this.read();
+      const cleared = emptyProgress(this.now(), {
+        owner: this.options.owner ?? ANONYMOUS,
+        deviceId: current.deviceId,
+      });
+      await this.storage.write(this.key, cleared);
+      this.announce(cleared);
+      for (const listener of this.listeners) listener(cleared);
+      return cleared;
+    });
   }
 
   /** Called with the latest progress whenever another tab changes it. */

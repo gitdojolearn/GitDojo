@@ -13,6 +13,7 @@ import { CloudCheck, CloudOff, RefreshCw, RotateCcw, Settings2 } from "lucide-re
 import { useState } from "react";
 import { formatRelativeTime } from "@/lib/time";
 import { resetProgress, syncNow, useProgressStore } from "../state/use-progress-store";
+import { ProgressBackupTransfer } from "./ProgressBackupTransfer";
 import { ProgressReportExport } from "./ProgressReportExport";
 
 /** Download a PDF progress report, or reset progress after an explicit confirmation. */
@@ -44,11 +45,12 @@ export function ProgressManagement() {
       </h2>
       <p className="mt-2 max-w-2xl text-small text-fg-secondary">
         {signedIn
-          ? "Everything you finish, every command you run, the hints you reveal and where you left off are saved to your account and follow you to your other devices. Download a PDF report of your progress at any time."
-          : "Progress is stored only in this browser. Download a PDF report of it, or start over. Playground repositories are kept either way."}
+          ? "Everything you finish, every command you run, the hints you reveal and where you left off are saved to your account and follow you to your other devices. Download a JSON backup to move or restore progress, or a PDF report to keep."
+          : "Progress is stored only in this browser. Download a JSON backup to restore it later, a PDF report to keep, or start over. Playground repositories are kept either way."}
       </p>
       {signedIn ? <SyncStatus /> : null}
       <div className="mt-4 flex flex-wrap gap-3">
+        <ProgressBackupTransfer onMessage={setAnnouncement} />
         <ProgressReportExport onExported={setAnnouncement} />
         {signedIn ? null : (
           <Button
@@ -72,7 +74,7 @@ export function ProgressManagement() {
           <DialogDescription>
             This permanently clears completed lessons and challenges, XP, command statistics, hint
             history and your last visited lesson in this browser. Your playground repository is not
-            affected. A PDF report keeps a record of what you did, but it cannot restore progress.
+            affected. You can restore from a JSON backup; a PDF report cannot restore progress.
           </DialogDescription>
           <DialogFooter>
             <Button

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site/site-header";
 import { AccountAvatar } from "@/features/auth/components/AccountAvatar";
+import { DeleteAccountData } from "./DeleteAccountData";
 import { SignOutButton } from "@/features/auth/components/SignOutButton";
 import { CertificateNameForm } from "@/features/certificates/components/CertificateNameForm";
 import { withReturnPath } from "@/lib/auth/return-path";
@@ -58,6 +59,7 @@ export default async function AccountPage() {
           <p className="mt-2 text-small text-fg-secondary">
             Your signed-in learning progress syncs to your GitDojo account across devices. Progress
             made while signed out stays in that browser and is not merged into this account.
+            You can bring signed-out progress over from the dashboard with a JSON backup.
             Playground files remain in your browser.
           </p>
           <Button asChild variant="secondary" className="mt-4">
@@ -65,6 +67,24 @@ export default async function AccountPage() {
               <LayoutDashboard aria-hidden="true" /> Open dashboard
             </Link>
           </Button>
+        </section>
+
+        <section
+          aria-labelledby="delete-account-heading"
+          className="mt-6 rounded-xl border border-danger/30 bg-surface p-6"
+        >
+          <h2 id="delete-account-heading" className="text-body font-semibold text-fg">
+            Delete account data
+          </h2>
+          <p className="mt-2 text-small text-fg-secondary">
+            Delete your GitDojo profile and synced learning data. Issued certificates are revoked
+            and retained without your name so existing verification links continue to show their
+            status. This does not delete your sign-in identity; contact your identity provider for
+            that. Anonymous browser progress and playground files are not part of this account.
+          </p>
+          <div className="mt-4">
+            <DeleteAccountData />
+          </div>
         </section>
 
         <p className="mt-6 text-small text-fg-muted">

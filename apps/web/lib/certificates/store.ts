@@ -36,7 +36,8 @@ export interface CompletionEvidence {
 export interface Certificate {
   id: string;
   statusIndex: number;
-  userId: string;
+  /** Null for an anonymized revoked credential retained after account deletion. */
+  userId: string | null;
   awardKey: AwardKey | typeof CAPSTONE_KEY;
   credentialKind: "completion" | "assessed";
   criteriaVersion: number;
@@ -52,7 +53,7 @@ export interface Certificate {
 interface Row {
   id: string;
   status_index: string;
-  user_id: string;
+  user_id: string | null;
   award_key: AwardKey | typeof CAPSTONE_KEY;
   credential_kind: "completion" | "assessed";
   criteria_version: number;

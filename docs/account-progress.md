@@ -452,7 +452,9 @@ Manual, with a configured tenant and database:
 ## Known limitations
 
 - Concept lessons and evidence-free/offline completions are learner-reported (see above).
-- Anonymous browser progress isn't merged into accounts.
+- Anonymous browser progress is not merged automatically. Learners can export a JSON backup from
+  the dashboard and restore it while signed in; imported activity and completions are synced to
+  the account.
 - An account's browser cache stays in IndexedDB after signing out (it is never shown to anyone
   else); clearing site data removes it.
 - Lesson workspaces and playground repositories are not progress and stay in the browser.
@@ -463,8 +465,11 @@ Manual, with a configured tenant and database:
   sends a few kilobytes on each change. The 64 KB limit is roughly 500 lessons' worth of hints.
 - Every progress request makes one userinfo call to WSO2, which adds latency and depends on the
   provider being reachable (`503` otherwise).
-- Deleting a WSO2 user doesn't delete their GitDojo rows. Remove them with
-  `DELETE FROM users WHERE issuer = $1 AND subject = $2` (completions cascade).
+- Learners can delete GitDojo account data from `/account`. The app deletes account-owned rows,
+  revokes and anonymizes issued certificates so their public status remains verifiable, and
+  clears that account's local progress cache. The identity-provider account itself is not deleted
+  and must be managed with that provider. Signing in again later creates a new, empty GitDojo
+  profile.
 
 ## Migrating an existing deployment
 

@@ -67,7 +67,9 @@ export type ProgressAction =
       seenReleases?: Record<string, number>;
       /** When this device's own progress reached the account. */
       syncedAt?: number;
-    };
+    }
+  /** Merge a validated backup into the active profile; its owner metadata is never adopted. */
+  | { type: "restore"; snapshot: LocalProgress; includeCounters: boolean };
 
 /** Git subcommand names: lowercase words and dashes. Anything else is ignored. */
 const COMMAND_NAME = /^[a-z][a-z-]{0,31}$/;
@@ -287,6 +289,60 @@ export function applyProgressAction(
         },
         now,
       );
+    }
+
+    case "restore": {
+      const source = action.snapshot;
+      const mergeCompletions = <T>(current: Record<string, T>, incoming: Record<string, T>) => ({
+        ...incoming,
+        ...current,
+      });
+      const commandStats = { ...progress.commandStats };
+      if (action.includeCounters) {
+        for (const [command, stat] of Object.entries(source.commandStats)) {
+          const current = commandStats[command];
+          commandStats[command] = current
+            ? {
+                uses: Math.max(current.uses, stat.uses),
+                successes: Math.max(current.successes, stat.successes),
+                lastUsedAt: Math.max(current.lastUsedAt, stat.lastUsedAt),
+              }
+            : stat;
+        }
+      }
+      const revealedHints = { ...progress.revealedHints };
+      for (const [key, hints] of Object.entries(source.revealedHints)) {
+        revealedHints[key] = [...new Set([...(revealedHints[key] ?? []), ...hints])];
+      }
+      const seenReleases = { ...progress.seenReleases };
+      for (const [version, seenAt] of Object.entries(source.seenReleases)) {
+        const current = seenReleases[version];
+        if (current === undefined || seenAt < current) seenReleases[version] = seenAt;
+      }
+      const incomingLast = source.lastLesson;
+      const lastLesson =
+        incomingLast &&
+        (!progress.lastLesson || incomingLast.visitedAt > progress.lastLesson.visitedAt)
+          ? incomingLast
+          : progress.lastLesson;
+      const next = {
+        ...progress,
+        completedLessons: mergeCompletions(progress.completedLessons, source.completedLessons),
+        completedChallenges: mergeCompletions(
+          progress.completedChallenges,
+          source.completedChallenges,
+        ),
+        completedPractice: mergeCompletions(progress.completedPractice, source.completedPractice),
+        commandStats,
+        ...(action.includeCounters
+          ? { playgroundSessions: Math.max(progress.playgroundSessions, source.playgroundSessions) }
+          : {}),
+        revealedHints,
+        seenReleases,
+        ...(lastLesson ? { lastLesson } : {}),
+        createdAt: Math.min(progress.createdAt, source.createdAt),
+      };
+      return touch({ ...next, xp: totalXp(next) }, now);
     }
 
     case "reset": {

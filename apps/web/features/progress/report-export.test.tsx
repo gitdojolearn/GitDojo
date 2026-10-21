@@ -61,10 +61,10 @@ afterEach(() => {
 });
 
 describe("PDF progress report export", () => {
-  it("replaces the JSON export, and waits for progress to load", () => {
+  it("offers a JSON backup and waits for progress to load", () => {
     render(<ProgressManagement />);
     expect(screen.queryByTestId("export-progress")).toBeNull();
-    expect(screen.queryByText(/JSON/)).toBeNull();
+    expect(screen.getByTestId("export-progress-backup")).toBeDisabled();
     expect(screen.getByTestId("export-report")).toBeDisabled();
   });
 
