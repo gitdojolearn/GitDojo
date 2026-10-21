@@ -662,8 +662,12 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
       expect(
         await sql`SELECT id FROM users WHERE issuer = ${learner.issuer} AND subject = ${learner.subject}`,
       ).toHaveLength(0);
-      expect(await sql`SELECT user_id FROM lesson_completions WHERE user_id = ${userId}`).toHaveLength(0);
-      expect(await sql`SELECT id FROM assessment_attempts WHERE id = ${attempt.id}`).toHaveLength(0);
+      expect(
+        await sql`SELECT user_id FROM lesson_completions WHERE user_id = ${userId}`,
+      ).toHaveLength(0);
+      expect(await sql`SELECT id FROM assessment_attempts WHERE id = ${attempt.id}`).toHaveLength(
+        0,
+      );
       const [retained] = await sql`
         SELECT user_id, recipient_name, public_name_consent, assessment_attempt_id,
                revoked_at, revocation_reason

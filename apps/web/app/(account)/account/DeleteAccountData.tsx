@@ -38,7 +38,8 @@ export function DeleteAccountData() {
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
-      if (!response.ok) throw new Error("Account deletion could not be completed. Please try again.");
+      if (!response.ok)
+        throw new Error("Account deletion could not be completed. Please try again.");
       deleted = true;
       try {
         await clearProgressAfterAccountDeletion();
@@ -56,10 +57,22 @@ export function DeleteAccountData() {
 
   return (
     <>
-      <Button variant="secondary" onClick={() => { setConfirmation(""); setError(null); setOpen(true); }}>
+      <Button
+        variant="secondary"
+        onClick={() => {
+          setConfirmation("");
+          setError(null);
+          setOpen(true);
+        }}
+      >
         <Trash2 aria-hidden="true" /> Delete GitDojo account data
       </Button>
-      <Dialog open={open} onOpenChange={(next) => { if (!busy) setOpen(next); }}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!busy) setOpen(next);
+        }}
+      >
         <DialogContent aria-busy={busy}>
           <DialogTitle>Delete your GitDojo account data?</DialogTitle>
           <DialogDescription>
@@ -68,7 +81,10 @@ export function DeleteAccountData() {
             remains verifiable. Your sign-in identity at the identity provider is not deleted.
             Anonymous progress and playground files stored in this browser are kept.
           </DialogDescription>
-          <label className="mt-4 block text-small font-medium text-fg" htmlFor="delete-account-confirmation">
+          <label
+            className="mt-4 block text-small font-medium text-fg"
+            htmlFor="delete-account-confirmation"
+          >
             Type DELETE to confirm
           </label>
           <input
@@ -81,13 +97,33 @@ export function DeleteAccountData() {
             }}
             disabled={busy}
           />
-          {error ? <p role="alert" className="mt-3 text-small text-danger">{error}</p> : null}
+          {error ? (
+            <p role="alert" className="mt-3 text-small text-danger">
+              {error}
+            </p>
+          ) : null}
           <DialogFooter>
-            <Button variant="secondary" disabled={busy} onClick={() => {
-              setOpen(false);
-            }}>Cancel</Button>
-            <Button variant="danger" disabled={busy || confirmation !== "DELETE"} onClick={() => { void remove(); }}>
-              {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <Trash2 aria-hidden="true" />}
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                setOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={busy || confirmation !== "DELETE"}
+              onClick={() => {
+                void remove();
+              }}
+            >
+              {busy ? (
+                <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Trash2 aria-hidden="true" />
+              )}
               Delete account data
             </Button>
           </DialogFooter>

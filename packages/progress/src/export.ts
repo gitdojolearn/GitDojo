@@ -27,7 +27,10 @@ export function exportProgress(progress: LocalProgress, now: number): ProgressEx
   };
 }
 
-export function parseProgressExport(value: unknown, now: number): {
+export function parseProgressExport(
+  value: unknown,
+  now: number,
+): {
   progress: LocalProgress;
   issues: string[];
 } {

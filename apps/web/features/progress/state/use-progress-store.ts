@@ -432,7 +432,9 @@ export function recordReleaseSeen(version: string): Promise<void> {
 export type RestoreProgressResult = "ok" | "activity-sync-failed" | "not-ready";
 
 /** Merges a portable backup. Account transfers sync imported activity as its original device. */
-export async function restoreProgressBackup(snapshot: LocalProgress): Promise<RestoreProgressResult> {
+export async function restoreProgressBackup(
+  snapshot: LocalProgress,
+): Promise<RestoreProgressResult> {
   const state = useProgressStore.getState();
   if (!state.progress || !state.catalog || !repository || state.status !== "ready") {
     return "not-ready";
@@ -447,7 +449,9 @@ export async function restoreProgressBackup(snapshot: LocalProgress): Promise<Re
   });
 
   if (accountMode) {
-    const activitySnapshot = sameDevice ? useProgressStore.getState().progress ?? imported : imported;
+    const activitySnapshot = sameDevice
+      ? (useProgressStore.getState().progress ?? imported)
+      : imported;
     const activity = await syncAccountActivity(activitySnapshot, accountFetch);
     if (activity.status !== "ok") return "activity-sync-failed";
     await syncCompletionsNow();
@@ -492,7 +496,9 @@ function sanitizeBackup(snapshot: LocalProgress, catalog: ProgressCatalog): Loca
       .map(([id, record]) => [id, { ...record, xp: 0 }]),
   );
   const commandStats = Object.fromEntries(
-    Object.entries(snapshot.commandStats).filter(([command]) => /^[a-z][a-z-]{0,31}$/.test(command)),
+    Object.entries(snapshot.commandStats).filter(([command]) =>
+      /^[a-z][a-z-]{0,31}$/.test(command),
+    ),
   );
   const normalized = {
     ...snapshot,

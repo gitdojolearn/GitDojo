@@ -58,9 +58,9 @@ export default async function AccountPage() {
           </h2>
           <p className="mt-2 text-small text-fg-secondary">
             Your signed-in learning progress syncs to your GitDojo account across devices. Progress
-            made while signed out stays in that browser and is not merged into this account.
-            You can bring signed-out progress over from the dashboard with a JSON backup.
-            Playground files remain in your browser.
+            made while signed out stays in that browser and is not merged into this account. You can
+            bring signed-out progress over from the dashboard with a JSON backup. Playground files
+            remain in your browser.
           </p>
           <Button asChild variant="secondary" className="mt-4">
             <Link href="/dashboard">

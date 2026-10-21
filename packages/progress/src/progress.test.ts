@@ -806,8 +806,8 @@ describe("progress restore", () => {
     expect(restored.deviceId).toBe(account.deviceId);
     expect(restored.completedLessons["git-init"]).toEqual(current.completedLessons["git-init"]);
     expect(restored.completedLessons["git-branch"]).toBeDefined();
-    expect(restored.commandStats.commit.uses).toBe(1);
-    expect(restored.commandStats.status.uses).toBe(1);
+    expect(restored.commandStats.commit).toMatchObject({ uses: 1 });
+    expect(restored.commandStats.status).toMatchObject({ uses: 1 });
     expect(restored.playgroundSessions).toBe(1);
     const repeated = applyProgressAction(
       restored,
