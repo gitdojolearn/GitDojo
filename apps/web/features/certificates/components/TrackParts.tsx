@@ -25,7 +25,7 @@ export const STATUS_DISPLAY: Record<
   "not-started": { label: "Not started", icon: Circle, tone: "text-fg-muted" },
 };
 
-/** "4 of 11 requirements complete", with a labelled bar. */
+/** "4 of 11 certificate requirements met", with a labelled bar. */
 export function TrackProgressBar({
   progress,
   label,
@@ -35,13 +35,13 @@ export function TrackProgressBar({
   label: string;
   className?: string;
 }) {
-  const text = `${String(progress.completed)} of ${String(progress.total)} requirements complete`;
+  const text = `${String(progress.completed)} of ${String(progress.total)} certificate requirements met`;
   return (
     <div className={className}>
       <p className="flex items-baseline justify-between gap-3 text-small text-fg-secondary">
         <span data-testid="track-count">
           <span className="font-mono font-semibold text-fg">{progress.completed}</span> of{" "}
-          <span className="font-mono">{progress.total}</span> requirements complete
+          <span className="font-mono">{progress.total}</span> certificate requirements met
         </span>
         <span className="font-mono text-caption text-fg-muted">{progress.percent}%</span>
       </p>
@@ -62,6 +62,10 @@ export function TrackProgressBar({
           style={{ width: `${String(progress.percent)}%` }}
         />
       </div>
+      <p className="mt-2 text-caption text-fg-muted">
+        This counts certificate requirements met. Saved hands-on completions marked “Complete (not
+        verified yet)” do not count until GitDojo verifies them.
+      </p>
     </div>
   );
 }

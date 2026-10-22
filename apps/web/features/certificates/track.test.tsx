@@ -123,7 +123,7 @@ const expectComplete = (count: number) =>
   waitFor(() => {
     expect(
       screen.getByRole("progressbar", { name: "Certification track requirements" }),
-    ).toHaveAttribute("aria-valuetext", `${String(count)} of 11 requirements complete`);
+    ).toHaveAttribute("aria-valuetext", `${String(count)} of 11 certificate requirements met`);
   });
 const statusOf = (id: string) =>
   screen.getAllByTestId("track-requirement").find((item) => item.dataset.requirement === id);
@@ -216,7 +216,9 @@ describe("certification track page", () => {
       "/learn/git-basics/what-is-git",
     );
     expect(status()).toHaveAttribute("data-state", "not-started");
-    expect(screen.getByTestId("track-count")).toHaveTextContent("0 of 11 requirements complete");
+    expect(screen.getByTestId("track-count")).toHaveTextContent(
+      "0 of 11 certificate requirements met",
+    );
     expect(statusOf("lesson:what-is-git")).toHaveAttribute("aria-current", "step");
   });
 
@@ -229,7 +231,7 @@ describe("certification track page", () => {
     expect(next).toHaveAttribute("href", "/learn/git-basics/working-tree");
     expect(
       screen.getByRole("progressbar", { name: "Certification track requirements" }),
-    ).toHaveAttribute("aria-valuetext", "4 of 11 requirements complete");
+    ).toHaveAttribute("aria-valuetext", "4 of 11 certificate requirements met");
     expect(screen.getByTestId("track-phase")).toHaveTextContent("7 requirements left");
     expect(
       within(statusOf("lesson:git-init") ?? document.body).getByTestId("requirement-status"),
@@ -490,7 +492,10 @@ describe("dashboard track card", () => {
       "/learn/git-basics/working-tree",
     );
     const counts = screen.getAllByTestId("track-count").map((item) => item.textContent);
-    expect(counts).toEqual(["4 of 11 requirements complete", "4 of 11 requirements complete"]);
+    expect(counts).toEqual([
+      "4 of 11 certificate requirements met",
+      "4 of 11 certificate requirements met",
+    ]);
     expect(card.getByTestId("track-card-next")).toHaveTextContent("Title working-tree");
     expect(card.getByRole("link", { name: "View all criteria" })).toHaveAttribute(
       "href",

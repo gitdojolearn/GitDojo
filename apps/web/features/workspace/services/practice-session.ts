@@ -33,18 +33,31 @@ export function workspaceIdForPractice(taskId: string): string {
  */
 export class PracticeSession extends WorkspaceSession<PracticeSnapshot> {
   readonly taskId: string;
-  readonly completionAttemptId: string | null;
+  private completionAttemptIdValue: string | null;
+  private completionAttempt: CompletionAttemptBinding | null;
   private started: Promise<unknown> | null = null;
   private latest: PracticeSnapshot | null = null;
 
   constructor(
     private readonly task: LessonDefinition,
     env: LessonEnvironment,
-    private readonly completionAttempt: CompletionAttemptBinding | null = null,
+    completionAttempt: CompletionAttemptBinding | null = null,
   ) {
     super(workspaceIdForPractice(task.id), env);
     this.taskId = task.id;
-    this.completionAttemptId = completionAttempt?.id ?? null;
+    this.completionAttempt = completionAttempt;
+    this.completionAttemptIdValue = completionAttempt?.id ?? null;
+  }
+
+  get completionAttemptId(): string | null {
+    return this.completionAttemptIdValue;
+  }
+
+  /** Attach a server attempt after a transient startup failure, without resetting the task. */
+  async attachCompletionAttempt(binding: CompletionAttemptBinding): Promise<void> {
+    this.completionAttempt = binding;
+    this.completionAttemptIdValue = binding.id;
+    await this.env.gitFor(this.workspaceId).bindCompletionAttempt(binding);
   }
 
   async start(): Promise<PracticeSnapshot> {

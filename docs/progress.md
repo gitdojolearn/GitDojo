@@ -166,6 +166,12 @@ Every dashboard view is derived from the stored record and the catalog; none add
 - **Database**: IndexedDB database `gitdojo-progress`, object store `records`, key `anonymous`.
   It is separate from the LightningFS database (`gitdojo`) holding lesson and playground
   repositories.
+- **Completion evidence retry**: attempt-bound evidence that a signed-in learner has completed a
+  hands-on requirement is kept in a separate IndexedDB outbox until the account confirms it. The
+  outbox is scoped to the account cache, retries after reload or when the browser comes online, and
+  is removed after the server accepts the evidence. It is not included in progress exports because
+  it contains repository data; an older completion without evidence can be recovered by reopening
+  the exercise online and completing its objectives again.
 - **Atomic updates**: every change is an action (`ProgressAction`) applied by a pure reducer to
   the **latest stored record inside a single readwrite transaction**. Concurrent updates from this
   tab or another one are serialized by IndexedDB, so none are lost and a tab holding stale data

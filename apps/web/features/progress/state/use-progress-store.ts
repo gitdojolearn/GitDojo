@@ -29,6 +29,12 @@ import {
   type CompletionUploadKind,
 } from "../services/account-progress";
 import { createBrowserProgressRepository } from "../services/browser-progress";
+import {
+  clearPendingCompletionEvidence,
+  deletePendingCompletionEvidence,
+  readPendingCompletionEvidence,
+  savePendingCompletionEvidence,
+} from "../services/completion-evidence-outbox";
 
 export type ProgressStatus = "loading" | "ready";
 
@@ -51,6 +57,8 @@ export type AccountNotice = "session-ended" | "unavailable" | "load-failed";
  * - `paused`: an upload failed; the changes are kept here and retried.
  */
 export type SyncState = "off" | "synced" | "pending" | "paused";
+export type VerificationNotice =
+  "attempt-unavailable" | "not-persisted" | "unavailable" | "rejected" | null;
 
 /** XP a completion just earned: 0 when the content had been completed before. */
 export interface CompletionAward {
@@ -75,6 +83,7 @@ interface ProgressState {
   sync: SyncState;
   /** When the account last confirmed this device's progress. */
   syncedAt: number | null;
+  verificationNotice: VerificationNotice;
 }
 
 /**
@@ -94,6 +103,7 @@ export const useProgressStore = create<ProgressState>()(() => ({
   accountNotice: null,
   sync: "off",
   syncedAt: null,
+  verificationNotice: null,
 }));
 
 let repository: ProgressRepository | null = null;
@@ -111,6 +121,7 @@ let syncing: Promise<void> | null = null;
 let dirty = false;
 let retryDelay = 0;
 let onlineListener: (() => void) | null = null;
+let verificationRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let deletingAccount = false;
 /**
  * The notice the activity sync put up, if any. Completion uploads and the initial load report
@@ -329,13 +340,7 @@ function retry(): void {
   const delay = RETRY_DELAYS_MS[Math.min(retryDelay, RETRY_DELAYS_MS.length - 1)] ?? 60_000;
   retryDelay += 1;
   scheduleSync(delay);
-  if (onlineListener === null && typeof window !== "undefined") {
-    onlineListener = () => {
-      retryDelay = 0;
-      void syncNow();
-    };
-    window.addEventListener("online", onlineListener);
-  }
+  ensureOnlineRetry();
 }
 
 /**
@@ -349,6 +354,21 @@ async function uploadLesson(
 ): Promise<boolean> {
   uploading += 1;
   updateSaving();
+  const state = useProgressStore.getState();
+  const accountId =
+    state.mode === "account" && state.progress?.owner.kind === "account"
+      ? state.progress.owner.accountId
+      : null;
+  let evidencePersisted = !evidence || !accountId;
+  if (evidence && accountId) {
+    try {
+      await savePendingCompletionEvidence({ accountId, kind, contentId: lessonId, evidence });
+      evidencePersisted = true;
+    } catch (error) {
+      console.warn("[gitdojo] could not persist pending completion evidence", error);
+      useProgressStore.setState({ verificationNotice: "not-persisted" });
+    }
+  }
   try {
     const result = await uploadLessonCompletion(lessonId, accountFetch, kind, evidence);
     switch (result.status) {
@@ -362,21 +382,83 @@ async function uploadLesson(
         if (useProgressStore.getState().accountNotice !== "load-failed") {
           useProgressStore.setState({ accountNotice: null });
         }
+        if (accountId && evidence) {
+          await deletePendingCompletionEvidence(accountId, kind, lessonId).catch(() => undefined);
+          useProgressStore.setState({ verificationNotice: null });
+        }
         return true;
       case "signed-out":
         useProgressStore.setState({ accountNotice: "session-ended" });
         return false;
       case "unavailable":
         useProgressStore.setState({ accountNotice: "unavailable" });
+        if (evidence) {
+          useProgressStore.setState({
+            verificationNotice: evidencePersisted ? "unavailable" : "not-persisted",
+          });
+          if (evidencePersisted) {
+            scheduleVerificationRetry();
+            ensureOnlineRetry();
+          }
+        }
         return false;
       case "rejected":
         console.warn("[gitdojo] the account did not accept a lesson completion");
-        return true;
+        if (evidence) useProgressStore.setState({ verificationNotice: "rejected" });
+        return false;
     }
   } finally {
     uploading -= 1;
     updateSaving();
   }
+}
+
+/** Retry evidence that was saved locally after a transient account or network failure. */
+export async function retryPendingVerification(): Promise<void> {
+  const state = useProgressStore.getState();
+  const accountId =
+    state.mode === "account" && state.progress?.owner.kind === "account"
+      ? state.progress.owner.accountId
+      : null;
+  if (
+    !accountId ||
+    typeof indexedDB === "undefined" ||
+    (typeof navigator !== "undefined" && !navigator.onLine)
+  )
+    return;
+  try {
+    const pendingEvidence = await readPendingCompletionEvidence(accountId);
+    for (const entry of pendingEvidence) {
+      const accepted = await uploadLesson(entry.contentId, entry.kind, entry.evidence);
+      if (!accepted) return;
+    }
+    if (pendingEvidence.length > 0) useProgressStore.setState({ verificationNotice: null });
+  } catch (error) {
+    console.warn("[gitdojo] could not retry pending completion evidence", error);
+    useProgressStore.setState({ verificationNotice: "unavailable" });
+  }
+}
+
+export function reportVerificationIssue(notice: Exclude<VerificationNotice, null>): void {
+  useProgressStore.setState({ verificationNotice: notice });
+}
+
+function scheduleVerificationRetry(): void {
+  if (verificationRetryTimer !== null) return;
+  verificationRetryTimer = setTimeout(() => {
+    verificationRetryTimer = null;
+    void retryPendingVerification();
+  }, 15_000);
+}
+
+function ensureOnlineRetry(): void {
+  if (onlineListener !== null || typeof window === "undefined") return;
+  onlineListener = () => {
+    retryDelay = 0;
+    void syncNow();
+    void retryPendingVerification();
+  };
+  window.addEventListener("online", onlineListener);
 }
 
 /** Uploads lessons completed in this browser that the account does not have yet. */
@@ -536,11 +618,14 @@ export async function clearProgressAfterAccountDeletion(): Promise<void> {
   deletingAccount = true;
   syncNotice = null;
   const owner = useProgressStore.getState().progress?.owner;
-  if (owner?.kind === "account" && typeof localStorage !== "undefined") {
-    try {
-      localStorage.setItem(`gitdojo:deleted-account:${owner.accountId}`, "1");
-    } catch {
-      // The in-memory guard still protects this tab if browser storage is unavailable.
+  if (owner?.kind === "account") {
+    await clearPendingCompletionEvidence(owner.accountId).catch(() => undefined);
+    if (typeof localStorage !== "undefined") {
+      try {
+        localStorage.setItem(`gitdojo:deleted-account:${owner.accountId}`, "1");
+      } catch {
+        // The in-memory guard still protects this tab if browser storage is unavailable.
+      }
     }
   }
   if (onlineListener && typeof window !== "undefined") {
@@ -731,6 +816,7 @@ export function initProgress(
     });
     if (account.kind === "account")
       void uploadPending(progress, account.lessons, catalog, account.challenges, account.practice);
+    if (account.kind === "account") void retryPendingVerification();
     // This device's own activity has not reached the account yet, however old it is.
     if (account.kind !== "anonymous") void syncNow();
     const queued = pending;
@@ -763,6 +849,8 @@ export function resetProgressStoreForTests(): void {
   dirty = false;
   deletingAccount = false;
   retryDelay = 0;
+  if (verificationRetryTimer !== null) clearTimeout(verificationRetryTimer);
+  verificationRetryTimer = null;
   syncNotice = null;
   if (onlineListener && typeof window !== "undefined") {
     window.removeEventListener("online", onlineListener);
@@ -780,6 +868,7 @@ export function resetProgressStoreForTests(): void {
     accountNotice: null,
     sync: "off",
     syncedAt: null,
+    verificationNotice: null,
   });
 }
 

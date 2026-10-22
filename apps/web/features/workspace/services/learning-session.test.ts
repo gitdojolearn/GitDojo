@@ -5,7 +5,13 @@ import { createGitEngine, createLightningFs, WorkspaceFileSystem } from "@gitdoj
 import { type LessonEnvironment } from "@gitdojo/lesson-engine";
 import { createRepositoryStateReader } from "@gitdojo/repository-state";
 import { type LessonDefinition } from "@gitdojo/shared-types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+  type CompletionAttemptRecord,
+  verifyCompletionEvidence,
+} from "@/lib/completion-verification/evidence";
+
+vi.mock("server-only", () => ({}));
 import { LearningSession } from "./learning-session";
 import { FileExistsError } from "./workspace-session";
 
@@ -63,6 +69,42 @@ describe("LearningSession", () => {
       state: { initialized: true, currentBranch: "main" },
     });
     expect(evidence?.objects.some((object) => object.type === "commit")).toBe(true);
+  });
+
+  it("can attach a server attempt after startup and keep earlier objective checkpoints", async () => {
+    const session = new LearningSession(lesson, environment(), undefined, null, true);
+    await session.start();
+    await session.execute("git init");
+    await session.execute("git add README.md");
+    await session.execute('git commit -m "Initial commit"');
+    const binding = {
+      id: "22222222-2222-4222-8222-222222222222",
+      nonce: "late-server-nonce",
+      kind: "lesson" as const,
+      contentId: lesson.id,
+      contentVersion: "b".repeat(64),
+    };
+
+    await session.attachCompletionAttempt(binding);
+    const evidence = await session.exportCompletionEvidence();
+
+    expect(evidence?.binding).toEqual(binding);
+    expect(evidence?.checkpoints?.map((checkpoint) => checkpoint.objectiveId)).toEqual([
+      "initialize",
+      "stage-readme",
+      "first-commit",
+    ]);
+    expect(evidence?.objects.some((object) => object.type === "commit")).toBe(true);
+    if (!evidence) throw new Error("Expected evidence after attaching an attempt");
+    const attempt: CompletionAttemptRecord = {
+      ...binding,
+      userId: "test-user",
+      usedAt: null,
+      evidenceHash: null,
+    };
+    expect(await verifyCompletionEvidence(evidence, attempt, lesson)).toMatchObject({
+      result: { completed: true, passedCount: 3 },
+    });
   });
 
   it("runs the first-commit flow and completes the lesson", async () => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { type ProgressCatalog } from "@gitdojo/progress";
-import { IconButton } from "@gitdojo/ui";
+import { Button, IconButton } from "@gitdojo/ui";
 import { TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,10 +9,12 @@ import { useEffect, useState } from "react";
 import { createBrowserProgressRepository } from "../services/browser-progress";
 import {
   initProgress,
+  retryPendingVerification,
   resolveBrowserAccount,
   useProgressStore,
   type AccountNotice,
   type ProgressMode,
+  type VerificationNotice,
 } from "../state/use-progress-store";
 
 /** Pages of the sign-in and sign-out flow, which never show progress. */
@@ -55,27 +57,57 @@ export function ProgressProvider({ catalog }: { catalog: ProgressCatalog }) {
   return <ProgressStatusNotice />;
 }
 
-const ACCOUNT_NOTICES: Record<AccountNotice, { title: string; message: string; signIn: boolean }> =
-  {
-    "session-ended": {
-      title: "Your session has ended.",
-      message:
-        "Lessons you finish are kept in this browser and saved to your account when you sign in again.",
-      signIn: true,
-    },
-    unavailable: {
-      title: "Account sync paused.",
-      message:
-        "We couldn't reach your account. Your progress is kept in this browser and saved to your account later.",
-      signIn: false,
-    },
-    "load-failed": {
-      title: "Account progress unavailable.",
-      message:
-        "We couldn't load your account progress. Progress from this visit may not be saved; try again later.",
-      signIn: false,
-    },
-  };
+const ACCOUNT_NOTICES: Record<
+  | AccountNotice
+  | "attempt-unavailable"
+  | "verification-unavailable"
+  | "verification-rejected"
+  | "verification-not-persisted",
+  { title: string; message: string; signIn: boolean }
+> = {
+  "session-ended": {
+    title: "Your session has ended.",
+    message:
+      "Lessons you finish are kept in this browser and saved to your account when you sign in again.",
+    signIn: true,
+  },
+  unavailable: {
+    title: "Account sync paused.",
+    message:
+      "We couldn't reach your account. Your progress is kept in this browser and saved to your account later.",
+    signIn: false,
+  },
+  "attempt-unavailable": {
+    title: "Certificate verification did not start.",
+    message:
+      "Your lesson progress is saved, but it may not count toward a certificate yet. Reopen the exercise while online to retry verification.",
+    signIn: false,
+  },
+  "verification-unavailable": {
+    title: "Certificate verification is waiting to sync.",
+    message:
+      "Your evidence is saved in this browser. Retry now or stay online and it will retry automatically.",
+    signIn: false,
+  },
+  "verification-rejected": {
+    title: "GitDojo could not verify this exercise.",
+    message:
+      "Your completion is saved. Reopen the exercise and complete its objectives again to create fresh verification evidence.",
+    signIn: false,
+  },
+  "verification-not-persisted": {
+    title: "Verification evidence could not be saved for retry.",
+    message:
+      "Your lesson progress is saved. Keep this tab open, check your connection, then reopen the exercise to recreate its evidence.",
+    signIn: false,
+  },
+  "load-failed": {
+    title: "Account progress unavailable.",
+    message:
+      "We couldn't load your account progress. Progress from this visit may not be saved; try again later.",
+    signIn: false,
+  },
+};
 
 /**
  * A non-blocking notice when progress is not being saved, locally or to the account: learning
@@ -85,12 +117,16 @@ export function ProgressStatusNotice() {
   const persistence = useProgressStore((state) => state.persistence);
   const saveError = useProgressStore((state) => state.saveError);
   const accountNotice = useProgressStore((state) => state.accountNotice);
+  const verificationNotice = useProgressStore((state) => state.verificationNotice);
+  const [retrying, setRetrying] = useState(false);
   const local = saveError ?? (persistence?.mode === "memory" ? persistence.reason : null);
   const notice = local
     ? { title: "Progress not saved.", message: local, signIn: false }
-    : accountNotice
-      ? ACCOUNT_NOTICES[accountNotice]
-      : null;
+    : verificationNotice
+      ? ACCOUNT_NOTICES[verificationNoticeCopy(verificationNotice)]
+      : accountNotice
+        ? ACCOUNT_NOTICES[accountNotice]
+        : null;
   const message = notice?.message ?? null;
   const [dismissed, setDismissed] = useState<string | null>(null);
 
@@ -102,21 +138,43 @@ export function ProgressStatusNotice() {
           className="fixed right-4 bottom-4 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-warning/40 bg-elevated p-3 shadow-xl shadow-shade/40 max-md:bottom-[calc(4rem+env(safe-area-inset-bottom))] max-md:left-4"
         >
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
-          <p className="text-small text-fg-secondary">
-            <span className="font-medium text-fg">{notice?.title} </span>
-            {message}
-            {notice?.signIn ? (
-              <>
-                {" "}
-                <Link
-                  href="/sign-in"
-                  className="font-medium text-accent underline-offset-2 hover:underline"
-                >
-                  Sign in
-                </Link>
-              </>
+          <div className="min-w-0 flex-1 text-small text-fg-secondary">
+            <p>
+              <span className="font-medium text-fg">{notice?.title} </span>
+              {message}
+              {notice?.signIn ? (
+                <>
+                  {" "}
+                  <Link
+                    href="/sign-in"
+                    className="font-medium text-accent underline-offset-2 hover:underline"
+                  >
+                    Sign in
+                  </Link>
+                </>
+              ) : null}
+            </p>
+            {verificationNotice ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-2"
+                disabled={retrying}
+                onClick={() => {
+                  setRetrying(true);
+                  if (verificationNotice === "unavailable") {
+                    void retryPendingVerification().finally(() => {
+                      setRetrying(false);
+                    });
+                  } else if (typeof window !== "undefined") {
+                    window.location.reload();
+                  }
+                }}
+              >
+                {retrying ? "Retrying…" : "Retry verification"}
+              </Button>
             ) : null}
-          </p>
+          </div>
           <IconButton
             aria-label="Dismiss"
             className="-mt-1 -mr-1 shrink-0"
@@ -130,4 +188,17 @@ export function ProgressStatusNotice() {
       ) : null}
     </div>
   );
+}
+
+function verificationNoticeCopy(
+  notice: Exclude<VerificationNotice, null>,
+):
+  | "attempt-unavailable"
+  | "verification-unavailable"
+  | "verification-rejected"
+  | "verification-not-persisted" {
+  if (notice === "attempt-unavailable") return "attempt-unavailable";
+  if (notice === "not-persisted") return "verification-not-persisted";
+  if (notice === "rejected") return "verification-rejected";
+  return "verification-unavailable";
 }
