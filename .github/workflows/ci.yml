@@ -212,7 +212,12 @@ jobs:
     name: Browser / ${{ matrix.project }}
     needs: build
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --user 1001
     timeout-minutes: 25
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     strategy:
       fail-fast: false
       matrix:
@@ -230,7 +235,6 @@ jobs:
         run: |
           tar -xzf "$RUNNER_TEMP/gitdojo-build/gitdojo-build.tar.gz" -C apps/web
           test -s apps/web/.next/BUILD_ID
-      - uses: ./.github/actions/setup-playwright
       - name: Production browser and accessibility tests
         # Call Playwright directly: the upstream build is reused rather than rebuilt by Turbo.
         run: pnpm --filter @gitdojo/web exec playwright test --project="$PLAYWRIGHT_PROJECT" --workers=2
@@ -252,17 +256,17 @@ jobs:
     name: Accounts / ${{ matrix.project }}
     needs: build
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --user 1001
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         include:
           - project: auth-flow
-            browser: chromium
           - project: account-chromium
-            browser: chromium
           - project: account-firefox
-            browser: firefox
     # Sign-in against the mock identity provider and account progress against real PostgreSQL.
     services:
       postgres:
@@ -280,7 +284,8 @@ jobs:
           --health-retries 10
     env:
       # Disposable service credentials; never point this job at a real database.
-      E2E_DATABASE_URL: postgres://gitdojo:gitdojo@localhost:5432/gitdojo_e2e_test
+      E2E_DATABASE_URL: postgres://gitdojo:gitdojo@postgres:5432/gitdojo_e2e_test
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -298,9 +303,6 @@ jobs:
         run: pnpm db:migrate
         env:
           DATABASE_URL: ${{ env.E2E_DATABASE_URL }}
-      - uses: ./.github/actions/setup-playwright
-        with:
-          browser: ${{ matrix.browser }}
       - name: Account browser tests
         # Account isolation, duplicate XP, sign-out and ended sessions, against PostgreSQL.
         run: pnpm --filter @gitdojo/web exec playwright test --project="$PLAYWRIGHT_PROJECT" --workers=2
