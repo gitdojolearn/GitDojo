@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { TerminalController, type TerminalSurface } from "./terminal-controller";
 import { type TerminalExecutor } from "./terminal-executor";
+import { type TerminalCompletionContext } from "./completion";
 
 // eslint-disable-next-line no-control-regex
 const strip = (text: string) => text.replace(/\x1b(\[[0-9;?]*[A-Za-z]|[78])/g, "");
 
-function setup(executor?: TerminalExecutor) {
+function setup(
+  executor?: TerminalExecutor,
+  getCompletionContext?: () => TerminalCompletionContext,
+) {
   const writes: string[] = [];
   const clear = vi.fn();
   const surface: TerminalSurface = {
@@ -25,6 +29,7 @@ function setup(executor?: TerminalExecutor) {
     pushHistory: (line) => {
       history = [...history, line];
     },
+    getCompletionContext,
   });
   const type = async (text: string) => {
     for (const char of text) await controller.handleData(char);
@@ -85,6 +90,48 @@ describe("TerminalController", () => {
     await controller.handleData("\r");
     expect(run).toHaveBeenLastCalledWith("git init");
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("completes a unique command and then executes the completed input", async () => {
+    const { controller, run, type } = setup();
+    controller.start();
+    await type("git stat\t\r");
+    expect(run).toHaveBeenCalledWith("git status ");
+  });
+
+  it("extends an ambiguous prefix, then lists choices on a repeated Tab", async () => {
+    const context: TerminalCompletionContext = {
+      branches: ["feature/login", "feature/list"],
+      commits: [],
+      files: [],
+      remotes: [],
+      stashes: [],
+      tags: [],
+    };
+    const { controller, type, output } = setup(undefined, () => context);
+    controller.start();
+    await type("git switch feature/\t\t");
+    expect(output()).toContain("feature/login");
+    expect(output()).toContain("feature/list");
+  });
+
+  it("deletes the previous word with Ctrl+W", async () => {
+    const { controller, type, run } = setup();
+    controller.start();
+    await type("git status --short");
+    await controller.handleData("\x17");
+    await controller.handleData("\r");
+    expect(run).toHaveBeenCalledWith("git status ");
+  });
+
+  it("deletes from the cursor to the end with Ctrl+K", async () => {
+    const { controller, type, run } = setup();
+    controller.start();
+    await type("git status --short");
+    await controller.handleData("\x01");
+    await controller.handleData("\x0b");
+    await controller.handleData("\r");
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("cancels the line with Ctrl+C", async () => {

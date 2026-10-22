@@ -18,9 +18,10 @@ import { ThemeToggle } from "@/features/theme";
 import { ConflictBanner, ConflictEditorDialog, useConflictEditorStore } from "@/features/conflicts";
 import { EditorPanel, useEditorStore } from "@/features/editor";
 import { ErrorExplanation } from "@/features/errors";
-import { RepositoryGraphPanel } from "@/features/repository";
+import { RepositoryGraphPanel, useRepositoryStore } from "@/features/repository";
 import {
   createTerminalExecutor,
+  completionContextFromRepository,
   terminalBanner,
   type TerminalHandle,
   TerminalPanel,
@@ -67,6 +68,10 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
   const { status, execute, files } = playground;
   const terminalRef = useRef<TerminalHandle>(null);
   const executor = useMemo(() => createTerminalExecutor(execute), [execute]);
+  const getCompletionContext = useCallback(
+    () => completionContextFromRepository(useRepositoryStore.getState().repositoryState),
+    [],
+  );
   const [tab, setTab] = useState<PlaygroundTab>("terminal");
   const scenarioId = usePlaygroundStore((state) => state.scenarioId);
   const scenario = scenarios.find((candidate) => candidate.id === scenarioId);
@@ -187,6 +192,7 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
             executor={executor}
             ready={ready}
             banner={BANNER}
+            getCompletionContext={getCompletionContext}
             handleRef={terminalRef}
             footer={<ErrorExplanation />}
             className={cn(visibleOn("terminal"), "h-[calc(100dvh-10rem)] md:h-[480px] lg:h-auto")}
