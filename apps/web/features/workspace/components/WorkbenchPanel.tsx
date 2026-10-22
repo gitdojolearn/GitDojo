@@ -2,7 +2,7 @@
 
 import { cn, Panel, PanelHeader } from "@gitdojo/ui";
 import { FileCode, SquareTerminal, type LucideIcon } from "lucide-react";
-import { useEffect, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, type ReactNode, type RefObject } from "react";
 import {
   EditorView,
   isDirty,
@@ -13,9 +13,11 @@ import {
 import {
   Terminal,
   TerminalActions,
+  completionContextFromRepository,
   type TerminalExecutor,
   type TerminalHandle,
 } from "@/features/terminal";
+import { useRepositoryStore } from "@/features/repository";
 
 export interface WorkbenchPanelProps {
   executor: TerminalExecutor;
@@ -51,6 +53,10 @@ export function WorkbenchPanel({
   const view = useEditorStore((state) => state.view);
   const setView = useEditorStore((state) => state.setView);
   const unsaved = useEditorStore((state) => state.tabs.some(isDirty));
+  const getCompletionContext = useCallback(
+    () => completionContextFromRepository(useRepositoryStore.getState().repositoryState),
+    [],
+  );
 
   useEffect(() => {
     if (view === "terminal" && ready) handleRef.current?.focus();
@@ -96,7 +102,13 @@ export function WorkbenchPanel({
         className={cn("min-h-0 flex-1 flex-col", view === "terminal" ? "flex" : "hidden")}
       >
         <div className="min-h-0 flex-1">
-          <Terminal executor={executor} ready={ready} banner={banner} handleRef={handleRef} />
+          <Terminal
+            executor={executor}
+            ready={ready}
+            banner={banner}
+            getCompletionContext={getCompletionContext}
+            handleRef={handleRef}
+          />
         </div>
         {terminalFooter}
       </div>

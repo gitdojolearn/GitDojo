@@ -6,6 +6,7 @@ import { useTheme } from "@/features/theme";
 import { terminalTheme } from "../services/ansi";
 import { TerminalController } from "../services/terminal-controller";
 import { type TerminalExecutor } from "../services/terminal-executor";
+import { type TerminalCompletionContext } from "../services/completion";
 import { useTerminalStore } from "../state/use-terminal-store";
 
 export interface TerminalHandle {
@@ -21,6 +22,7 @@ export interface UseTerminalOptions {
   /** The terminal accepts input only once the workspace is ready. */
   ready: boolean;
   banner?: string;
+  getCompletionContext?: () => TerminalCompletionContext;
   handleRef?: Ref<TerminalHandle>;
 }
 
@@ -40,6 +42,7 @@ export function useTerminal({
   executor,
   ready,
   banner,
+  getCompletionContext,
   handleRef,
 }: UseTerminalOptions): RefObject<HTMLDivElement | null> {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +52,7 @@ export function useTerminal({
   const startedRef = useRef(false);
   const bannerRef = useRef(banner);
   const readyRef = useRef(ready);
+  const completionContextRef = useRef(getCompletionContext);
   const theme = useTheme();
   const themeRef = useRef(theme);
 
@@ -63,6 +67,7 @@ export function useTerminal({
     executorRef.current = executor;
     bannerRef.current = banner;
     readyRef.current = ready;
+    completionContextRef.current = getCompletionContext;
     startIfReady();
   });
 
@@ -132,6 +137,15 @@ export function useTerminal({
           executor: (input) => executorRef.current(input),
           getHistory: () => useTerminalStore.getState().history,
           pushHistory: store.pushHistory,
+          getCompletionContext: () =>
+            completionContextRef.current?.() ?? {
+              branches: [],
+              commits: [],
+              files: [],
+              remotes: [],
+              stashes: [],
+              tags: [],
+            },
           onTranscript: store.announce,
         },
       );

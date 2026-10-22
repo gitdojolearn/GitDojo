@@ -9,7 +9,7 @@ The optional assessed capstone exports canonical Git objects for independent ser
 ## The core loop
 
 ```text
-Terminal            apps/web/features/terminal       xterm.js renders; a controller edits the line
+Terminal            apps/web/features/terminal       xterm.js renders; a controller edits/completes the line and handles history
    ↓
 Command Parser      packages/command-parser          tokenize → parse → ParsedCommand (or a ParseError)
    ↓

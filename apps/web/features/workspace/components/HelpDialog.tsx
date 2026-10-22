@@ -13,9 +13,13 @@ import {
 import { CircleHelp } from "lucide-react";
 
 const SHORTCUTS = [
+  { keys: ["Tab"], label: "Complete Git commands, flags, branches and paths" },
   { keys: ["↑", "↓"], label: "Command history" },
   { keys: ["Ctrl", "L"], label: "Clear the terminal" },
   { keys: ["Ctrl", "C"], label: "Cancel the current line" },
+  { keys: ["Ctrl", "W"], label: "Delete the previous word" },
+  { keys: ["Ctrl", "U"], label: "Delete to the start of the line" },
+  { keys: ["Ctrl", "K"], label: "Delete to the end of the line" },
 ];
 
 export function HelpDialog() {

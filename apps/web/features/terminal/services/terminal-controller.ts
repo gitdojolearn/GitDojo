@@ -7,6 +7,13 @@ import {
 } from "./command-history";
 import { EMPTY_LINE, interpretInput, type LineState } from "./line-editor";
 import { renderInputLine } from "./render-line";
+import {
+  commonCompletionPrefix,
+  completionCandidates,
+  formatCompletionList,
+  replaceCompletion,
+  type TerminalCompletionContext,
+} from "./completion";
 import { type TerminalExecutor } from "./terminal-executor";
 
 /** The minimal surface the controller needs; xterm.js in the app, a fake in tests. */
@@ -20,6 +27,7 @@ export interface TerminalControllerOptions {
   executor: TerminalExecutor;
   getHistory: () => readonly string[];
   pushHistory: (line: string) => void;
+  getCompletionContext?: () => TerminalCompletionContext;
   /** Called with a plain-text transcript after every command (for screen readers). */
   onTranscript?: (text: string) => void;
 }
@@ -37,6 +45,7 @@ export class TerminalController {
   private active = false;
   /** Input typed while a command was running, replayed in order afterwards. */
   private typeahead: string[] = [];
+  private lastCompletion: { line: string; cursor: number } | null = null;
 
   constructor(
     private readonly surface: TerminalSurface,
@@ -57,6 +66,7 @@ export class TerminalController {
   /** Clears the screen and starts over (used when the lesson is reset). */
   restart(banner?: string): void {
     this.typeahead = [];
+    this.lastCompletion = null;
     this.surface.clear();
     this.surface.write("\r\x1b[2K");
     this.historyCursor = INITIAL_HISTORY_CURSOR;
@@ -80,6 +90,7 @@ export class TerminalController {
 
     switch (event.type) {
       case "edit":
+        this.lastCompletion = null;
         this.historyCursor = { ...this.historyCursor, index: null };
         this.redraw(event.state);
         return;
@@ -92,6 +103,9 @@ export class TerminalController {
         return;
       case "clear-screen":
         this.clearScreen();
+        return;
+      case "complete":
+        this.completeCurrentLine();
         return;
       case "submit":
         await this.submit(event.line);
@@ -143,6 +157,57 @@ export class TerminalController {
     if (!step) return;
     this.historyCursor = step.cursor;
     this.redraw({ buffer: step.line, cursor: step.line.length });
+    this.lastCompletion = null;
+  }
+
+  private completeCurrentLine(): void {
+    const state = this.line;
+    const result = completionCandidates(
+      state.buffer,
+      state.cursor,
+      this.options.getCompletionContext?.() ?? {
+        branches: [],
+        commits: [],
+        files: [],
+        remotes: [],
+        stashes: [],
+        tags: [],
+      },
+    );
+    if (!result || result.candidates.length === 0) return;
+
+    if (result.candidates.length === 1) {
+      const [candidate] = result.candidates;
+      if (candidate === undefined) return;
+      this.redraw(replaceCompletion(state, result.range, candidate, candidate.endsWith("/")));
+      this.options.onTranscript?.(`Completed: ${this.line.buffer}`);
+      this.lastCompletion = null;
+      return;
+    }
+
+    const repeated =
+      this.lastCompletion?.line === state.buffer && this.lastCompletion.cursor === state.cursor;
+    const commonPrefix = commonCompletionPrefix(result.candidates);
+    if (!repeated && commonPrefix.length > result.range.prefix.length) {
+      const completed = replaceCompletion(state, result.range, commonPrefix, false, false);
+      this.redraw(completed);
+      this.lastCompletion = { line: completed.buffer, cursor: completed.cursor };
+      return;
+    }
+
+    this.printCompletions(state, result.candidates);
+    this.lastCompletion = null;
+  }
+
+  private printCompletions(state: LineState, candidates: readonly string[]): void {
+    this.finishLine();
+    const rows = formatCompletionList(candidates, this.surface.cols);
+    if (rows.length > 0) {
+      this.surface.write(`${rows.map((row) => ansi.accent(row)).join("\r\n")}\r\n`);
+    }
+    this.options.onTranscript?.(`Available completions: ${candidates.join(", ")}`);
+    this.writePrompt();
+    this.redraw(state);
   }
 
   /** Moves the cursor past the current input (optionally appending a marker) and ends the line. */

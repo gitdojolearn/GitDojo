@@ -5,17 +5,25 @@ import "@xterm/xterm/css/xterm.css";
 import { type Ref } from "react";
 import { useTerminal, type TerminalHandle } from "../hooks/use-terminal";
 import { type TerminalExecutor } from "../services/terminal-executor";
+import { type TerminalCompletionContext } from "../services/completion";
 import { useTerminalStore } from "../state/use-terminal-store";
 
 export interface TerminalProps {
   executor: TerminalExecutor;
   ready: boolean;
   banner?: string;
+  getCompletionContext?: () => TerminalCompletionContext;
   handleRef?: Ref<TerminalHandle>;
 }
 
-export function Terminal({ executor, ready, banner, handleRef }: TerminalProps) {
-  const containerRef = useTerminal({ executor, ready, banner, handleRef });
+export function Terminal({
+  executor,
+  ready,
+  banner,
+  getCompletionContext,
+  handleRef,
+}: TerminalProps) {
+  const containerRef = useTerminal({ executor, ready, banner, getCompletionContext, handleRef });
   const announcement = useTerminalStore((state) => state.lastAnnouncement);
 
   return (

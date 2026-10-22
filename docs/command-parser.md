@@ -48,6 +48,15 @@ where it appeared, so commands can tell paths from revisions (`git reset HEAD~1 
 
 `help` and `clear` are terminal built-ins. They are parsed and routed like everything else.
 
+## Terminal completion
+
+Press `Tab` to complete a supported Git command or flag, or to complete a branch, commit, tag,
+remote, stash or working-tree path from the current virtual repository. Ambiguous matches extend to
+their shared prefix first; press `Tab` again to list the remaining choices. The completion source is
+the same command catalog used by the parser and the current repository snapshot, so suggestions
+never invoke a host shell or read files from the learner's machine. `Ctrl+W`, `Ctrl+U` and `Ctrl+K`
+delete the previous word, text before the cursor and text after the cursor, respectively.
+
 ## Router
 
 `executeCommand(parsed, { git })` maps each supported command to `GitEngine` calls

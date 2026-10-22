@@ -26,6 +26,18 @@ describe("interpretInput", () => {
     expect(interpretInput(at("git", 0), "\x05")).toEqual({ type: "edit", state: at("git", 3) });
   });
 
+  it("completes on Tab and supports standard line editing shortcuts", () => {
+    expect(interpretInput(at("git stat"), "\t")).toEqual({ type: "complete" });
+    expect(interpretInput(at("git status --short"), "\x17")).toEqual({
+      type: "edit",
+      state: at("git status "),
+    });
+    expect(interpretInput(at("git status --short", 11), "\x0b")).toEqual({
+      type: "edit",
+      state: at("git status ", 11),
+    });
+  });
+
   it("maps arrows to history and control keys to actions", () => {
     expect(interpretInput(EMPTY_LINE, "\x1b[A")).toEqual({
       type: "history",

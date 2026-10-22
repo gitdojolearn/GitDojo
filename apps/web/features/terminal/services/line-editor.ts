@@ -9,6 +9,7 @@ export type EditorEvent =
   | { type: "submit"; line: string }
   | { type: "interrupt" }
   | { type: "clear-screen" }
+  | { type: "complete" }
   | { type: "history"; direction: "previous" | "next" }
   | { type: "ignore" };
 
@@ -28,6 +29,8 @@ const KEYS = {
   interrupt: "\x03",
   clearScreen: "\x0c",
   clearLine: "\x15",
+  clearToEnd: "\x0b",
+  deleteWordBackward: "\x17",
 } as const;
 
 function edit(buffer: string, cursor: number): EditorEvent {
@@ -79,6 +82,17 @@ export function interpretInput(state: LineState, data: string): EditorEvent {
       return { type: "clear-screen" };
     case KEYS.clearLine:
       return edit(buffer.slice(cursor), 0);
+    case KEYS.clearToEnd:
+      return edit(buffer.slice(0, cursor), cursor);
+    case KEYS.deleteWordBackward: {
+      const beforeCursor = buffer.slice(0, cursor);
+      const withoutTrailingSpace = beforeCursor.replace(/\s+$/, "");
+      const wordStart = withoutTrailingSpace.search(/\S+$/);
+      const start = wordStart === -1 ? 0 : wordStart;
+      return edit(buffer.slice(0, start) + buffer.slice(cursor), start);
+    }
+    case "\t":
+      return { type: "complete" };
   }
   if ((KEYS.home as readonly string[]).includes(data)) return edit(buffer, 0);
   if ((KEYS.end as readonly string[]).includes(data)) return edit(buffer, buffer.length);

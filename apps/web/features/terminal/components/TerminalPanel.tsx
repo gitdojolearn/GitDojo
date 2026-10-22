@@ -14,12 +14,14 @@ import { Check, Copy, Eraser, SquareTerminal } from "lucide-react";
 import { useState, type ReactNode, type RefObject } from "react";
 import { type TerminalHandle } from "../hooks/use-terminal";
 import { type TerminalExecutor } from "../services/terminal-executor";
+import { type TerminalCompletionContext } from "../services/completion";
 import { Terminal } from "./Terminal";
 
 export interface TerminalPanelProps {
   executor: TerminalExecutor;
   ready: boolean;
   banner?: string;
+  getCompletionContext?: () => TerminalCompletionContext;
   handleRef: RefObject<TerminalHandle | null>;
   /** Shown under the terminal, e.g. the error explanation. */
   footer?: ReactNode;
@@ -63,6 +65,7 @@ export function TerminalPanel({
   executor,
   ready,
   banner,
+  getCompletionContext,
   handleRef,
   footer,
   className,
@@ -76,13 +79,19 @@ export function TerminalPanel({
             Terminal
           </PanelTitle>
           <PanelDescription className="truncate">
-            Git sandbox · Safe browser environment
+            Safe Git sandbox · Tab completes commands and refs
           </PanelDescription>
         </div>
         <TerminalActions handleRef={handleRef} />
       </PanelHeader>
       <div className="min-h-0 flex-1">
-        <Terminal executor={executor} ready={ready} banner={banner} handleRef={handleRef} />
+        <Terminal
+          executor={executor}
+          ready={ready}
+          banner={banner}
+          getCompletionContext={getCompletionContext}
+          handleRef={handleRef}
+        />
       </div>
       {footer}
     </Panel>
