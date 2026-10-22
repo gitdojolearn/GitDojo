@@ -33,15 +33,11 @@ runs:
         else
           set -- install --with-deps "$BROWSER"
         fi
-        # apt on a hosted runner can block on a package lock held by unattended upgrades. Left
-        # alone it hangs until the job times out (25 minutes, reported as "cancelled", with no
-        # tests run), so cap each attempt and retry once instead.
-        for attempt in 1 2; do
-          if timeout --kill-after=30s 180s pnpm --filter @gitdojo/web exec playwright "$@"; then
-            exit 0
-          fi
-          echo "::warning::playwright $1 did not finish within 3 minutes (attempt $attempt of 2)"
-          sleep 15
-        done
-        echo "::error::playwright $1 failed twice; see the warnings above"
+        # Playwright's install-deps can take several minutes while apt downloads packages. A
+        # short timeout can kill Playwright but leave apt running; retrying then collides with
+        # that orphaned process's dpkg lock. Give one install a bounded 8-minute window instead.
+        if timeout --kill-after=30s 480s pnpm --filter @gitdojo/web exec playwright "$@"; then
+          exit 0
+        fi
+        echo "::error::playwright $1 did not finish within 8 minutes or failed"
         exit 1

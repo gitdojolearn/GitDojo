@@ -8,9 +8,10 @@ import {
   type LessonDefinition,
 } from "@gitdojo/shared-types";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { loadAccountSession, useAccountSession } from "@/features/auth";
 import { explainOutcome, useExplanationStore } from "@/features/errors";
 import { useLessonStore } from "@/features/lesson";
-import { recordCommand } from "@/features/progress";
+import { recordCommand, reportVerificationIssue } from "@/features/progress";
 import { useRepositoryStore } from "@/features/repository";
 import { createBrowserLessonEnvironment } from "../services/browser-environment";
 import { settleEditor } from "../services/git-editor";
@@ -84,6 +85,9 @@ export function useLearningSession(
         lessonRef.current.objectives.length > 0
           ? await startCompletionAttempt(completionKind, lessonId)
           : null;
+      if (!binding) await loadAccountSession();
+      const captureUnboundCheckpoints =
+        !binding && useAccountSession.getState().session?.status === "signed-in";
       if (cancelled) return null;
       if (
         sessionRef.current?.lessonId !== lessonId ||
@@ -94,6 +98,7 @@ export function useLearningSession(
           environmentRef.current(),
           workspaceRef.current,
           binding,
+          captureUnboundCheckpoints,
         );
       }
       session = sessionRef.current;
@@ -192,10 +197,26 @@ export function useLearningSession(
     setAttempt((value) => value + 1);
   }, []);
 
-  const exportCompletionEvidence = useCallback(() => {
+  const exportCompletionEvidence = useCallback(async () => {
     const session = sessionRef.current;
-    return session ? session.exportCompletionEvidence() : Promise.resolve(null);
-  }, []);
+    if (!session) return null;
+    try {
+      if (!session.completionAttemptId) {
+        const binding = await startCompletionAttempt(completionKind, lessonId);
+        if (!binding) {
+          reportVerificationIssue("attempt-unavailable");
+          return null;
+        }
+        await session.attachCompletionAttempt(binding);
+      }
+      const evidence = await session.exportCompletionEvidence();
+      if (!evidence) reportVerificationIssue("attempt-unavailable");
+      return evidence;
+    } catch {
+      reportVerificationIssue("not-persisted");
+      return null;
+    }
+  }, [completionKind, lessonId]);
 
   return {
     status,

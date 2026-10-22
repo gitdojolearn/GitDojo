@@ -218,6 +218,37 @@ describe("POST /api/progress/lessons", () => {
     );
   });
 
+  it("upgrades an older reported completion in place when new evidence is accepted", async () => {
+    const store = createMemoryProgressStore();
+    const reported = await store.recordCompletion(ADA, {
+      lessonId: "git-init",
+      lessonType: "interactive",
+      courseId: "git-basics",
+      xp: 50,
+    });
+    const originalDate = reported.completion.completedAt;
+
+    const upgraded = await store.recordCompletion(ADA, {
+      lessonId: "git-init",
+      lessonType: "interactive",
+      courseId: "git-basics",
+      xp: 50,
+      verification: {
+        attemptId: "new-attempt",
+        evidenceHash: "a".repeat(64),
+        objectiveResults: { completed: true },
+      },
+    });
+
+    expect(upgraded.created).toBe(false);
+    expect(upgraded.completion).toMatchObject({
+      verification: "verified",
+      verifiedAt: expect.any(Date) as unknown,
+      completedAt: originalDate,
+      xp: 50,
+    });
+  });
+
   it.each([
     ["client-supplied XP", { lessonId: "git-init", xp: 9999 }],
     ["a user id", { lessonId: "git-init", userId: "someone-else" }],

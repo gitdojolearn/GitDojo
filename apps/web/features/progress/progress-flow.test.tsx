@@ -18,6 +18,7 @@ import { ProgressStatusNotice } from "./components/ProgressProvider";
 import { useLessonProgress } from "./hooks/use-lesson-progress";
 import {
   initProgress,
+  reportVerificationIssue,
   resetProgressStoreForTests,
   useProgressStore,
 } from "./state/use-progress-store";
@@ -220,5 +221,15 @@ describe("lesson activity reaches progress", () => {
     expect(await screen.findByTestId("progress-status")).toHaveTextContent(
       "couldn't save your latest progress",
     );
+  });
+
+  it("explains when verification did not start and offers a retry", async () => {
+    reportVerificationIssue("attempt-unavailable");
+    render(<ProgressStatusNotice />);
+
+    expect(await screen.findByTestId("progress-status")).toHaveTextContent(
+      "Your lesson progress is saved, but it may not count toward a certificate yet.",
+    );
+    expect(screen.getByRole("button", { name: "Retry verification" })).toBeInTheDocument();
   });
 });

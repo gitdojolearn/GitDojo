@@ -42,7 +42,8 @@ export function workspaceIdForLesson(lesson: LessonDefinition): string {
  */
 export class LearningSession extends WorkspaceSession<SessionSnapshot> {
   readonly lessonId: string;
-  readonly completionAttemptId: string | null;
+  private completionAttemptIdValue: string | null;
+  private completionAttempt: CompletionAttemptBinding | null;
   private progress: LessonProgress;
   private started: Promise<unknown> | null = null;
   private latest: SessionSnapshot | null = null;
@@ -53,12 +54,25 @@ export class LearningSession extends WorkspaceSession<SessionSnapshot> {
     env: LessonEnvironment,
     /** Challenges use their own workspaces, so ids never clash with lessons. */
     workspaceId: string = workspaceIdForLesson(lesson),
-    private readonly completionAttempt: CompletionAttemptBinding | null = null,
+    completionAttempt: CompletionAttemptBinding | null = null,
+    private readonly captureUnboundCheckpoints = false,
   ) {
     super(workspaceId, env);
     this.lessonId = lesson.id;
-    this.completionAttemptId = completionAttempt?.id ?? null;
+    this.completionAttempt = completionAttempt;
+    this.completionAttemptIdValue = completionAttempt?.id ?? null;
     this.progress = createInitialProgress(lesson);
+  }
+
+  get completionAttemptId(): string | null {
+    return this.completionAttemptIdValue;
+  }
+
+  /** Attach a server attempt after a transient startup failure, without losing the workspace. */
+  async attachCompletionAttempt(binding: CompletionAttemptBinding): Promise<void> {
+    this.completionAttempt = binding;
+    this.completionAttemptIdValue = binding.id;
+    await this.env.gitFor(this.workspaceId).bindCompletionAttempt(binding);
   }
 
   /**
@@ -111,10 +125,19 @@ export class LearningSession extends WorkspaceSession<SessionSnapshot> {
   }
 
   protected async evaluate(repository: RepositoryState): Promise<SessionSnapshot> {
-    if (this.completionAttempt && repository.initialized)
-      await this.env.gitFor(this.workspaceId).bindCompletionAttempt(this.completionAttempt);
+    if (repository.initialized && (this.completionAttempt || this.captureUnboundCheckpoints)) {
+      await this.env.gitFor(this.workspaceId).bindCompletionAttempt(
+        this.completionAttempt ?? {
+          id: "pending-verification",
+          nonce: "pending-verification",
+          kind: "lesson",
+          contentId: this.lesson.id,
+          contentVersion: "pending",
+        },
+      );
+    }
     const validation = await validateLesson(this.lesson, { repository });
-    if (this.completionAttempt && repository.initialized) {
+    if (repository.initialized && (this.completionAttempt || this.captureUnboundCheckpoints)) {
       const missing = validation.objectives.filter(
         (result) => result.passed && !this.checkpoints.has(result.objectiveId),
       );

@@ -9,6 +9,8 @@ export {
   initProgress,
   recordCompletion,
   recordProgress,
+  reportVerificationIssue,
+  retryPendingVerification,
   recordReleaseSeen,
   resetProgressStoreForTests,
   restoreProgressBackup,

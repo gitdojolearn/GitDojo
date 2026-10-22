@@ -113,6 +113,14 @@ every requirement in order before the learner starts: the ten Git Basics lessons
   only for the lesson the account opened most recently and hasn't finished, and **Not started**
   otherwise. The next requirement is the first one that does not yet satisfy issuance. Signed out,
   no progress is shown: work done without an account never counts.
+- **Recovering a reported completion.** Older or interrupted hands-on completions can appear as
+  **Complete (not verified yet)**. Open that lesson or Practice task while signed in and online,
+  finish its objectives again, and let the workspace submit fresh attempt-bound evidence. GitDojo
+  upgrades the existing row in place, retaining its original completion date and XP. If verification
+  is temporarily unavailable, the browser keeps the evidence for an automatic or manual retry and
+  shows a notice; if no attempt could be started, reopening the exercise retries the attempt without
+  resetting the workspace. Already-issued certificates keep their original criteria version and
+  remain in the account's certificate list.
 - **States.** Loading, accounts not configured, signed out (with sign-in and sign-up links that
   return to the track), progress unavailable (with retry; never eligible), not started (**Start
   certification track**), in progress (**Continue track**, opening the next requirement), eligible

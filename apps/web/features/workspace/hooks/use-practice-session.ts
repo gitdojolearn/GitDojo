@@ -7,8 +7,11 @@ import { type LessonDefinition } from "@gitdojo/shared-types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type WorkspaceFileActions } from "@/features/editor";
 import { explainOutcome, useExplanationStore } from "@/features/errors";
-import { recordCommand } from "@/features/progress";
-import { startCompletionAttempt } from "@/features/progress";
+import {
+  recordCommand,
+  reportVerificationIssue,
+  startCompletionAttempt,
+} from "@/features/progress";
 import { useRepositoryStore } from "@/features/repository";
 import { createBrowserLessonEnvironment } from "../services/browser-environment";
 import { settleEditor } from "../services/git-editor";
@@ -171,10 +174,26 @@ export function usePracticeSession(
     return session.exportAssessmentEvidence(attemptId);
   }, []);
 
-  const exportCompletionEvidence = useCallback(() => {
+  const exportCompletionEvidence = useCallback(async () => {
     const session = sessionRef.current;
-    return session ? session.exportCompletionEvidence() : Promise.resolve(null);
-  }, []);
+    if (!session || !completionKind) return null;
+    try {
+      if (!session.completionAttemptId) {
+        const binding = await startCompletionAttempt(completionKind, taskId);
+        if (!binding) {
+          reportVerificationIssue("attempt-unavailable");
+          return null;
+        }
+        await session.attachCompletionAttempt(binding);
+      }
+      const evidence = await session.exportCompletionEvidence();
+      if (!evidence) reportVerificationIssue("attempt-unavailable");
+      return evidence;
+    } catch {
+      reportVerificationIssue("not-persisted");
+      return null;
+    }
+  }, [completionKind, taskId]);
 
   return {
     status,

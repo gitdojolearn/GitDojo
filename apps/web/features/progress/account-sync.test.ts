@@ -5,6 +5,8 @@ import {
   type ProgressOwner,
   type ProgressStorage,
 } from "@gitdojo/progress";
+import "fake-indexeddb/auto";
+import { type CompletionEvidence } from "@gitdojo/shared-types";
 import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAccountSessionForTests } from "@/features/auth";
@@ -16,6 +18,7 @@ import {
   useProgressStore,
   type AccountResolution,
 } from "./state/use-progress-store";
+import { readPendingCompletionEvidence } from "./services/completion-evidence-outbox";
 
 const CATALOG: ProgressCatalog = {
   courses: [
@@ -71,7 +74,12 @@ const requestUrl = (input: RequestInfo | URL) =>
 /** A stand-in for GitDojo's account endpoints: one account's completions, keyed by lesson. */
 function fakeServer() {
   const completions = new Map<string, { xp: number; type: string; completedAt: string }>();
-  const state = { progressStatus: 200, uploadStatus: 0, posts: [] as string[] };
+  const state = {
+    progressStatus: 200,
+    uploadStatus: 0,
+    posts: [] as string[],
+    evidencePosts: [] as boolean[],
+  };
   const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = requestUrl(input);
     // Device activity has its own endpoint and its own test file; here it is a no-op.
@@ -95,8 +103,10 @@ function fakeServer() {
       );
     }
     if (url === "/api/progress/lessons" && init?.method === "POST") {
-      const { lessonId } = JSON.parse(init.body as string) as { lessonId: string };
+      const body = JSON.parse(init.body as string) as { lessonId: string; evidence?: unknown };
+      const { lessonId } = body;
       state.posts.push(lessonId);
+      state.evidencePosts.push(body.evidence !== undefined);
       if (state.uploadStatus !== 0) {
         return Promise.resolve(new Response(null, { status: state.uploadStatus }));
       }
@@ -267,6 +277,47 @@ describe("account progress in the browser", () => {
     await settled();
     expect(server.completions.has("git-init")).toBe(true);
     expect(server.state.posts).toEqual(["git-init", "git-init"]);
+  });
+
+  it("keeps verified evidence in IndexedDB after an outage and retries it after reload", async () => {
+    const storage = createMemoryStorage();
+    const server = fakeServer();
+    await visit(storage, accountOf(server), server.fetcher);
+    server.state.uploadStatus = 503;
+    const evidence = {
+      format: "gitdojo-completion-evidence",
+      version: 1,
+      attemptId: "attempt-retry",
+      contentVersion: "a".repeat(64),
+      binding: {
+        id: "attempt-retry",
+        nonce: "server-nonce",
+        kind: "lesson",
+        contentId: "git-init",
+        contentVersion: "a".repeat(64),
+      },
+      state: {},
+      index: [],
+      workingTree: [],
+      objects: [],
+    } as unknown as CompletionEvidence;
+
+    await recordCompletion(GIT_INIT, evidence);
+    await settled();
+    expect(server.state.evidencePosts).toEqual([true]);
+    expect(await readPendingCompletionEvidence("account-ada")).toHaveLength(1);
+
+    server.state.uploadStatus = 0;
+    await visit(storage, accountOf(server), server.fetcher);
+    await waitFor(() => {
+      expect(useProgressStore.getState().saving).toBe(false);
+    });
+    await waitFor(() => {
+      expect(server.state.evidencePosts.filter(Boolean).length).toBeGreaterThanOrEqual(2);
+    });
+    expect(server.completions.has("git-init")).toBe(true);
+    expect(await readPendingCompletionEvidence("account-ada")).toEqual([]);
+    expect(useProgressStore.getState().verificationNotice).toBeNull();
   });
 
   it("keeps a signed-in learner out of anonymous progress when the account can't be loaded", async () => {
