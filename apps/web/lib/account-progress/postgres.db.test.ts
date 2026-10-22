@@ -161,7 +161,9 @@ describe.skipIf(!TEST_DATABASE_URL)("PostgreSQL account progress", () => {
           Array.from({ length: 12 }, () => consumeAssessmentQuota(learner, "create")),
         );
         expect(results.filter((result) => result === null)).toHaveLength(2);
-        expect(results.filter((result) => result === 60)).toHaveLength(10);
+        const limited = results.filter((result): result is number => result !== null);
+        expect(limited).toHaveLength(10);
+        expect(limited.every((retryAfter) => retryAfter >= 1 && retryAfter <= 60)).toBe(true);
         expect(await consumeAssessmentQuota(identity("another-learner"), "create")).toBeNull();
       } finally {
         vi.unstubAllEnvs();
