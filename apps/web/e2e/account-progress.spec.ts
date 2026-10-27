@@ -62,7 +62,7 @@ async function signIn(page: Page, name: string, returnTo = "/dashboard") {
   await expect(page.locator("html")).toHaveAttribute("data-progress-mode", "account");
 }
 
-async function signOut(page: Page, name: string) {
+async function signOut(page: Page) {
   await page.getByTestId("account-menu").click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/auth\/signed-out$/);
@@ -181,7 +181,7 @@ test("anonymous progress and other accounts stay separate, and sign-out returns 
   expect(await stored(secondary)).toEqual([]);
 
   // Signing out brings the anonymous progress back, untouched.
-  await signOut(page, secondary);
+  await signOut(page);
   await page.goto("/dashboard");
   await expect(page.locator("html")).toHaveAttribute("data-progress-mode", "anonymous");
   await expect(stat(page, "xp")).toHaveText("25");
