@@ -3,15 +3,6 @@ import postgres from "postgres";
 import { e2eDatabaseUrl, mockIdpURL } from "../playwright.config";
 import { stat, waitForProgressSaved } from "./helpers";
 
-function accountMenuName(name: string) {
-  const initials = name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-  return `${initials} ${name} Account menu`;
-}
-
 // Account progress end to end: the real SDK sign-in against the mock identity provider, the
 // progress API, and a real PostgreSQL database (E2E_DATABASE_URL). Runs in Chromium and Firefox;
 // each project uses its own mock users so both can share one database.
@@ -67,12 +58,12 @@ async function signIn(page: Page, name: string, returnTo = "/dashboard") {
   await page.getByTestId("start-sign-in").click();
   await page.getByRole("link", { name: `Sign in as ${name}` }).click();
   await expect(page).toHaveURL(new RegExp(`${returnTo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
-  await expect(page.getByRole("button", { name: accountMenuName(name) })).toBeVisible();
+  await expect(page.getByTestId("account-menu")).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-progress-mode", "account");
 }
 
 async function signOut(page: Page, name: string) {
-  await page.getByRole("button", { name: accountMenuName(name) }).click();
+  await page.getByTestId("account-menu").click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/auth\/signed-out$/);
 }
@@ -224,7 +215,7 @@ test("an ended session is explained, and the lesson is saved after signing in ag
   await expect(page).toHaveURL(/\/sign-in/);
   await page.getByTestId("start-sign-in").click();
   await page.getByRole("link", { name: `Sign in as ${secondary}` }).click();
-  await expect(page.getByRole("button", { name: accountMenuName(secondary) })).toBeVisible();
+  await expect(page.getByTestId("account-menu")).toBeVisible();
   await expect.poll(() => stored(secondary)).toEqual([{ lesson_id: "what-is-git", xp: 25 }]);
   await page.goto("/dashboard");
   await expect(stat(page, "xp")).toHaveText("25");
