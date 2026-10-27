@@ -35,7 +35,7 @@ test("mock provider renders untrusted scopes as text and preserves callback para
 });
 
 async function accountMenu(page: Page) {
-  const trigger = page.getByRole("button", { name: "Account menu for Ada Lovelace" });
+  const trigger = page.getByRole("button", { name: "AL Ada Lovelace Account menu" });
   await expect(trigger).toBeVisible();
   return trigger;
 }
