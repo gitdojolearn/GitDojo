@@ -109,7 +109,7 @@ function AccountMenu({
         <button
           type="button"
           data-testid="account-menu"
-          aria-label={`${initialsOf(user.name)} Account menu for ${user.name}`}
+          aria-label={`${initialsOf(user.name)} ${user.name} Account menu`}
           className={cn(
             "flex h-9 min-w-9 items-center gap-2 rounded-md px-1 text-small text-fg-secondary transition-colors outline-none hover:bg-hover hover:text-fg focus-visible:ring-3 focus-visible:ring-[var(--focus-ring)] data-[state=open]:bg-hover",
             !compact && "sm:pr-2",
