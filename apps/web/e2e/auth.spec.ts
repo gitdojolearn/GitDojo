@@ -121,7 +121,7 @@ test.describe("navigation reflects the session", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await answerSession(page, ADA);
     await page.goto("/dashboard");
-    const trigger = page.getByRole("button", { name: "Account menu for Ada Lovelace" });
+    const trigger = page.getByTestId("account-menu");
     await expect(trigger).toBeVisible();
     await expect(page.getByTestId("account-avatar").first()).toHaveText("AL");
 

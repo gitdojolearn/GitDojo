@@ -253,7 +253,7 @@ describe("certification track page", () => {
     signIn();
     render(<CertificationTrack requirements={INFO} />);
     const panel = await screen.findByTestId("track-certificate-name");
-    expect(panel).toHaveTextContent("Grace Hopper");
+    await waitFor(() => expect(panel).toHaveTextContent("Grace Hopper"));
     expect(within(panel).getByRole("link", { name: "Edit" })).toHaveAttribute(
       "href",
       "/account#certificate-name",

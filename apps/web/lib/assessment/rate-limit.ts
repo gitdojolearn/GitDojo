@@ -50,14 +50,15 @@ export async function consumeAssessmentQuota(
     const [accepted] = await tx<{ reset_at: Date }[]>`
       INSERT INTO assessment_rate_limits (user_id, quota, used, reset_at)
       VALUES (
-        ${userId}, ${quota}, ${safeCost}, now() + (${windowSeconds} * interval '1 second')
+        ${userId}, ${quota}, ${safeCost}, clock_timestamp() + (${windowSeconds} * interval '1 second')
       )
       ON CONFLICT (user_id, quota) DO UPDATE SET
-        used = CASE WHEN assessment_rate_limits.reset_at <= now()
+        used = CASE WHEN assessment_rate_limits.reset_at <= clock_timestamp()
           THEN EXCLUDED.used ELSE assessment_rate_limits.used + EXCLUDED.used END,
-        reset_at = CASE WHEN assessment_rate_limits.reset_at <= now()
-          THEN EXCLUDED.reset_at ELSE assessment_rate_limits.reset_at END
-      WHERE CASE WHEN assessment_rate_limits.reset_at <= now()
+        reset_at = CASE WHEN assessment_rate_limits.reset_at <= clock_timestamp()
+          THEN clock_timestamp() + (${windowSeconds} * interval '1 second')
+          ELSE assessment_rate_limits.reset_at END
+      WHERE CASE WHEN assessment_rate_limits.reset_at <= clock_timestamp()
         THEN EXCLUDED.used <= ${maximum}
         ELSE assessment_rate_limits.used + EXCLUDED.used <= ${maximum}
       END
@@ -66,7 +67,7 @@ export async function consumeAssessmentQuota(
     if (accepted) return null;
 
     const [current] = await tx<{ retry_after: number }[]>`
-      SELECT GREATEST(1, CEIL(EXTRACT(EPOCH FROM (reset_at - now())))::int) AS retry_after
+      SELECT GREATEST(1, CEIL(EXTRACT(EPOCH FROM (reset_at - clock_timestamp())))::int) AS retry_after
       FROM assessment_rate_limits WHERE user_id = ${userId} AND quota = ${quota}
     `;
     return current?.retry_after ?? windowSeconds;

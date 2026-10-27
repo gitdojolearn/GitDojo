@@ -19,7 +19,7 @@ import { createPortal } from "react-dom";
 import { withReturnPath } from "@/lib/auth/return-path";
 import { markSignOutIntent } from "../services/sign-out-intent";
 import { loadAccountSession, useAccountSession } from "../state/use-account-session";
-import { type AccountUser } from "../types";
+import { initialsOf, type AccountUser } from "../types";
 import { AccountAvatar } from "./AccountAvatar";
 
 const noSubscription = () => () => undefined;
@@ -109,7 +109,6 @@ function AccountMenu({
         <button
           type="button"
           data-testid="account-menu"
-          aria-label={`Account menu for ${user.name}`}
           className={cn(
             "flex h-9 min-w-9 items-center gap-2 rounded-md px-1 text-small text-fg-secondary transition-colors outline-none hover:bg-hover hover:text-fg focus-visible:ring-3 focus-visible:ring-[var(--focus-ring)] data-[state=open]:bg-hover",
             !compact && "sm:pr-2",
@@ -117,6 +116,7 @@ function AccountMenu({
           )}
         >
           <AccountAvatar user={user} />
+          <span className="sr-only">{initialsOf(user.name)}</span>
           {compact ? null : (
             <>
               <span className="max-w-32 truncate max-sm:hidden" data-testid="account-name">
@@ -125,6 +125,7 @@ function AccountMenu({
               <ChevronDown className="size-4 max-sm:hidden" aria-hidden="true" />
             </>
           )}
+          <span className="sr-only">Account menu</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
