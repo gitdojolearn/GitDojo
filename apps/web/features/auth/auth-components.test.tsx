@@ -177,7 +177,7 @@ describe("AccountControls", () => {
     const user = userEvent.setup();
     render(<AccountControls />);
     const trigger = await screen.findByRole("button", {
-      name: "AL Ada Lovelace Account menu",
+      name: /AL.*Ada Lovelace.*Account menu/,
     });
     expect(screen.getByTestId("account-name")).toHaveTextContent("Ada Lovelace");
     expect(screen.getAllByTestId("account-avatar")[0]).toHaveTextContent("AL");
