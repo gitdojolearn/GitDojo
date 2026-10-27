@@ -65,6 +65,6 @@ test("resolves a merge conflict by hand in the editor", async ({ page, isMobile 
 
   await show(page, "Graph", isMobile);
   await expect(
-    page.getByTestId("commit-graph").getByRole("button", { name: /^Merge commit/ }),
+    page.getByTestId("commit-graph").getByRole("button", { name: /merge commit/i }),
   ).toHaveCount(1);
 });
