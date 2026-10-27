@@ -99,7 +99,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
       <button
         type="button"
         data-testid="commit-node"
-        aria-label={`${isMerge ? "Merge commit" : "Commit"} ${commit.shortOid}: ${commit.message}${
+        aria-label={`${commit.shortOid} ${commit.message} (${isMerge ? "merge commit" : "commit"})${
           branches.length > 0 ? ` (${branches.join(", ")})` : ""
         }${isHead ? " (HEAD)" : ""}`}
         aria-pressed={selected}
