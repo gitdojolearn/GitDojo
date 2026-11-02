@@ -11,6 +11,8 @@ import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAccountSessionForTests } from "@/features/auth";
 import {
+  addAnonymousProgress,
+  dismissAnonymousProgress,
   initProgress,
   recordCompletion,
   resetProgressStoreForTests,
@@ -174,6 +176,7 @@ async function settled() {
 beforeEach(() => {
   resetProgressStoreForTests();
   resetAccountSessionForTests();
+  window.localStorage.clear();
 });
 
 describe("account progress in the browser", () => {
@@ -400,5 +403,80 @@ describe("resolveBrowserAccount", () => {
     expect(await resolveBrowserAccount(fetcherFor(signedIn, null), 20)).toEqual({
       kind: "unavailable",
     });
+  });
+});
+
+describe("signed-out progress after signing in", () => {
+  /** Lets the after-load check of this browser's signed-out progress finish. */
+  const checked = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  async function learnSignedOut(
+    storage: ProgressStorage,
+    ...content: (typeof GIT_INIT | typeof WHAT_IS_GIT | typeof STAGING)[]
+  ) {
+    await visit(storage, anonymous);
+    for (const item of content) await recordCompletion(item);
+    await settled();
+  }
+
+  it("is offered, never uploaded on its own, and added as reported completions", async () => {
+    const storage = createMemoryStorage();
+    const server = fakeServer();
+    await learnSignedOut(storage, WHAT_IS_GIT, GIT_INIT);
+
+    await visit(storage, accountOf(server), server.fetcher);
+    await waitFor(() => {
+      expect(state().anonymousOffer).toEqual({ lessons: 2, challenges: 0, practice: 0 });
+    });
+    expect(server.state.posts).toEqual([]);
+
+    expect(await addAnonymousProgress()).toBe("ok");
+    await settled();
+    expect([...server.completions.keys()].sort()).toEqual(["git-init", "what-is-git"]);
+    // Nothing on offer is evidence of anything: it goes up as learner-reported.
+    expect(server.state.evidencePosts.every((sent) => !sent)).toBe(true);
+    expect(state().anonymousOffer).toBeNull();
+    expect(lessons()).toEqual(["git-init", "what-is-git"]);
+
+    // The signed-out record in this browser is left exactly as it was.
+    await visit(storage, anonymous);
+    expect(lessons()).toEqual(["git-init", "what-is-git"]);
+  });
+
+  it("leaves out what the account has, and is not offered again after Not now", async () => {
+    const storage = createMemoryStorage();
+    const server = fakeServer();
+    server.completions.set("what-is-git", { xp: 25, type: "concept", completedAt: FIRST });
+    await learnSignedOut(storage, WHAT_IS_GIT);
+    await visit(storage, accountOf(server), server.fetcher);
+    await checked();
+    expect(state().anonymousOffer).toBeNull();
+
+    await learnSignedOut(storage, GIT_INIT);
+    await visit(storage, accountOf(server), server.fetcher);
+    await waitFor(() => {
+      expect(state().anonymousOffer?.lessons).toBe(1);
+    });
+    dismissAnonymousProgress();
+    expect(state().anonymousOffer).toBeNull();
+    await visit(storage, accountOf(server), server.fetcher);
+    await checked();
+    expect(state().anonymousOffer).toBeNull();
+    expect(server.completions.has("git-init")).toBe(false);
+
+    // New signed-out work is a new offer, with everything still missing.
+    await learnSignedOut(storage, STAGING);
+    await visit(storage, accountOf(server), server.fetcher);
+    await waitFor(() => {
+      expect(state().anonymousOffer?.lessons).toBe(2);
+    });
+  });
+
+  it("is never offered to an anonymous learner", async () => {
+    const storage = createMemoryStorage();
+    await learnSignedOut(storage, GIT_INIT);
+    await visit(storage, anonymous);
+    await checked();
+    expect(state().anonymousOffer).toBeNull();
   });
 });

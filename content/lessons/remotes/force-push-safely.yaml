@@ -1,0 +1,120 @@
+# Lesson: Publish Rewritten History Safely
+# Schema and authoring guide: docs/lesson-authoring.md
+id: force-push-safely
+slug: force-push-safely
+title: Publish Rewritten History Safely
+
+goal: Amend a commit you already pushed, then replace it on origin with `git push --force-with-lease`.
+
+description: |
+  You pushed `feature/login` for review, then noticed `login.css` never made it into the commit.
+  Nobody else works on this branch, so you can fix the commit itself instead of adding another.
+
+  Amend `Add login form` so it includes `login.css`, then publish the rewritten branch without
+  any risk of throwing away someone else's work.
+
+difficulty: intermediate
+
+concepts:
+  - push
+  - rewriting-history
+  - remotes
+
+commands:
+  - git commit --amend
+  - git push --force-with-lease
+  - git status
+
+content:
+  - type: example
+    title: Why a plain push is rejected
+    command: git push
+    output: |
+      To gitdojo://simulated/origin.git
+       ! [rejected]        feature/login -> feature/login (non-fast-forward)
+      error: failed to push some refs to 'gitdojo://simulated/origin.git'
+    explanation: >-
+      Amending made a new commit and left the pushed one out of your branch. Accepting the push
+      would remove that commit from `origin`, so Git refuses unless you say that is what you want.
+
+  - type: comparison
+    title: Two ways to force
+    columns:
+      - title: git push --force-with-lease
+        items:
+          - Replaces the branch only if `origin` still has what you last fetched
+          - Refuses with `(stale info)` if a teammate pushed in the meantime
+          - The one to use day to day
+      - title: git push --force
+        items:
+          - Replaces the branch whatever is there
+          - Silently deletes commits you have never seen
+          - Rarely the right choice
+
+  - type: callout
+    tone: warning
+    title: Only rewrite what nobody builds on
+    body: >-
+      Amending, rebasing and force-pushing are fine on your own feature branch. On a shared branch
+      such as `main`, add a new commit instead, for example with `git revert`.
+
+setup:
+  initializeGit: true
+  commits:
+    - message: Initial commit
+      files:
+        README.md: |
+          # Weather
+    - message: Add login form
+      branch: feature/login
+      files:
+        login.js: |
+          export const login = (user) => fetch("/login", { method: "POST", body: user });
+  currentBranch: feature/login
+  remote:
+    branches:
+      - main
+      - feature/login
+  files:
+    login.css: |
+      .login {
+        display: grid;
+      }
+
+objectives:
+  - id: amended
+    description: "`Add login form` includes both `login.js` and `login.css`."
+    validator:
+      type: commit_changes
+      branch: feature/login
+      message: Add login form
+      files: [login.css, login.js]
+
+  - id: published
+    description: "`origin/feature/login` is the amended commit."
+    validator:
+      type: remote_branch_points_to_commit
+      branch: feature/login
+      sameAs: feature/login
+
+hints:
+  amended:
+    - The forgotten file belongs in the commit you already made, not in a new one.
+    - Stage `login.css`, then replace the latest commit, keeping its message.
+    - Run `git add login.css`, then `git commit --amend --no-edit`.
+  published:
+    - "`git status` says your branch and `origin/feature/login` have diverged: the amend replaced the commit `origin` has."
+    - A plain push is rejected. Force it, but only if nobody else pushed since you last fetched.
+    - Run `git push --force-with-lease`.
+
+# Offered while the learner is in one of these states; see docs/lesson-authoring.md#adaptive-hints.
+adaptiveHints:
+  - id: styles-in-own-commit
+    objective: amended
+    when:
+      - type: file_committed
+        file: login.css
+    hints:
+      - "`login.css` went into a commit of its own, so `Add login form` still lacks it."
+      - Undo that commit but keep its changes staged, then fold them into `Add login form`.
+      - Run `git reset --soft HEAD~1`, then `git commit --amend --no-edit`.

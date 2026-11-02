@@ -1,5 +1,6 @@
 // The progress feature's public API. Other features import only from here ("@/features/progress").
 
+export { AnonymousProgressOffer } from "./components/AnonymousProgressOffer";
 export { ProgressManagement } from "./components/ProgressManagement";
 export { XpAward } from "./components/XpAward";
 export { useLessonProgress } from "./hooks/use-lesson-progress";
@@ -13,6 +14,8 @@ export {
   retryPendingVerification,
   recordReleaseSeen,
   resetProgressStoreForTests,
+  addAnonymousProgress,
+  dismissAnonymousProgress,
   restoreProgressBackup,
   prepareForAccountDeletion,
   resumeAfterAccountDeletion,

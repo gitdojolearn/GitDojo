@@ -36,7 +36,7 @@ import { useState } from "react";
 import { lessonHref } from "@/features/course";
 import { challengeHref } from "@/features/challenges";
 import { formatRelativeTime, formatTimestamp } from "@/lib/time";
-import { ProgressManagement, useProgressStore } from "@/features/progress";
+import { AnonymousProgressOffer, ProgressManagement, useProgressStore } from "@/features/progress";
 import { CertificateAwards, CertificationTrackCard } from "@/features/certificates";
 import { ActivityCalendar } from "./ActivityCalendar";
 import { CommandUsage } from "./CommandUsage";
@@ -126,6 +126,7 @@ function DashboardContent({
 
   return (
     <div data-testid="dashboard" className="mt-10 space-y-10">
+      <AnonymousProgressOffer />
       <LearningJourney progress={progress} catalog={catalog} fresh={fresh} />
 
       <section aria-labelledby="totals-heading">

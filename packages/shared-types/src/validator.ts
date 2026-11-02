@@ -15,6 +15,11 @@ export type ValidatorDefinition =
       status: "untracked" | "modified" | "staged" | "committed" | "deleted" | "conflicted";
     }
   | { type: "commit_exists"; message?: string }
+  /**
+   * A commit in HEAD's history (with `message`, if given) has an author other than GitDojo's
+   * default identity: the learner set `user.name` and `user.email` first.
+   */
+  | { type: "commit_author_set"; message?: string }
   | { type: "commit_count"; count: number }
   /** A named commit reachable from a branch changes exactly these paths. */
   | { type: "commit_changes"; branch: string; message: string; files: string[] }

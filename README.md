@@ -17,7 +17,7 @@ GitDojo is an open-source interactive Git learning environment where developers 
 real commands, manipulating safe browser-based repositories, and visualizing what happens
 internally.
 
-> **Status: early development.** Seven courses, from Git Basics to Remotes and Collaboration, ten
+> **Status: early development.** Seven courses, from Git Basics to Remotes and Collaboration, seventeen
 > real-world challenges, Practice mode and a free playground run end to end in the browser. The
 > app includes a real Git engine, terminal and code editor, live repository visualizations,
 > state-based objective validation, progressive hints, plain-words error explanations, and a
@@ -39,8 +39,9 @@ Open the demo lesson at `/learn/demo` ("Your First Commit"):
 
 Or pick a course at `/learn`:
 
-- **Git Basics** (10 lessons): what Git is, `git init`, reading `git status`, the working tree and
-  staging area, `git add`, `git commit`, `git log`, and a first-repository challenge.
+- **Git Basics** (11 lessons): what Git is, `git init`, reading `git status`, the working tree and
+  staging area, `git add`, `git commit`, telling Git who you are with `git config`, `git log`, and
+  a first-repository challenge.
 - **Branching** (6 lessons): branches and HEAD, `git branch`, `git switch` / `git switch -c`,
   committing on a feature branch, and a branching challenge. The graph draws each branch in its own
   lane.
@@ -51,16 +52,17 @@ Or pick a course at `/learn`:
 - **Undo and Recover** (11 lessons): `git diff`, `git restore`, the three trees and
   `git reset`, `git revert`, `git stash`, `git cherry-pick`, recovering lost commits with
   `git reflog`, `git rebase`, and tidying history with an interactive rebase (`git rebase -i`:
-  reorder, squash, fixup, reword and drop, edited in a Git editor dialog).
+  reorder, squash, fixup, reword, edit and drop, edited in a Git editor dialog).
 - **Everyday Git** (5 lessons): `.gitignore`, `git mv`, `git show`, amending a commit, and
   marking releases with lightweight and annotated tags (`git tag`).
-- **Remotes and Collaboration** (6 lessons): remote-tracking branches, fetch, pull and push, then
-  hands-on against a **simulated** `origin` that lives in your browser: publish a branch with
-  `git push -u`, and sync with a teammate's push after a rejected push.
+- **Remotes and Collaboration** (8 lessons): remote-tracking branches, fetch, pull and push, then
+  hands-on against a **simulated** `origin` that lives in your browser: clone a repository,
+  publish a branch with `git push -u`, sync with a teammate's push after a rejected push, and
+  publish rewritten history safely with `git push --force-with-lease`.
 
 Then:
 
-- **Challenges** (`/challenges`): ten real-world problems ("you committed to the wrong
+- **Challenges** (`/challenges`): seventeen real-world problems ("you committed to the wrong
   branch...") with a scenario, a mission and success conditions, but no step-by-step
   instructions.
 - **Practice** (`/practice`): short tasks, one skill each, with a mission and no objectives or
@@ -83,7 +85,8 @@ learners can **sign up and sign in** on its secure hosted pages (GitDojo never h
 passwords) and get an account menu on every page. With a PostgreSQL database, signed-in
 learners' completions are saved to their account and appear in any browser
 ([docs/account-progress.md](docs/account-progress.md)); anonymous progress stays in the browser
-and is never merged into an account.
+and is never merged into an account unless the learner chooses to: after signing in, the
+dashboard offers to add this browser's signed-out completions, as learner-reported ones.
 
 Signed-in learners can earn three **completion certificates** by completing their named lessons
 and Practice tasks. Each certificate has a downloadable PDF, a signed Open Badge, and a public
@@ -102,11 +105,11 @@ message and a **"Why did this happen?"** panel explains it, with likely causes b
 files and branches. **Hints** climb from a concept to the exact command, which only appears on
 request.
 
-Supported commands: `init`, `status`, `add`, `rm`, `commit`, `log`, `diff`, `restore`, `branch`,
-`switch`, `checkout`, `merge`, `reset`, `revert`, `stash`, `cherry-pick`, `reflog`, `rebase`
-(including `-i`), `tag`, and `remote`, `fetch`, `pull` and `push` against simulated remotes
-(type `help` in any terminal). There is no network: `git clone` and `git remote add` are not
-available.
+Supported commands: `init`, `config`, `status`, `add`, `rm`, `mv`, `commit`, `log`, `show`,
+`diff`, `restore`, `branch`, `switch`, `checkout`, `merge`, `reset`, `revert`, `stash`,
+`cherry-pick`, `reflog`, `rebase` (including `-i`), `tag`, and `clone`, `remote`, `fetch`, `pull`
+and `push` against simulated remotes (type `help` in any terminal). There is no network: every
+remote, including one you clone or add yourself, lives in your browser.
 
 Everything runs locally in the browser: Git is [isomorphic-git](https://isomorphic-git.org), files
 live in IndexedDB via [LightningFS](https://github.com/isomorphic-git/lightning-fs), the editor is
@@ -344,7 +347,7 @@ single YAML file. See:
 - [x] Merging (fast-forward, three-way) and hand-resolved merge conflicts
 - [x] Code editor (Monaco) with file explorer and Git status letters
 - [x] Playground with scenarios, persistence and snapshot export
-- [x] Challenge mode: ten real-world challenges
+- [x] Challenge mode: seventeen real-world challenges
 - [x] Recovery commands: `diff`, `restore`, `rm`, `reset`, `revert`, `stash`, `cherry-pick`,
       `reflog`, `rebase`
 - [x] Error explanations and progressive hints
@@ -356,7 +359,8 @@ single YAML file. See:
 - [x] Account-backed completion progress across devices
 - [x] Versioned completion certificates with PDF, signed Open Badge and public verification
 - [x] Server-graded Git capstone with an assessed skills credential
-- [x] Simulated remotes in the browser: `remote`, `fetch`, `pull` and `push`
+- [x] Simulated remotes in the browser: `clone`, `remote`, `fetch`, `pull` and `push`, including
+      force-with-lease, branch deletion and tags
 - [ ] Real remote repositories (`clone` over the network), then real GitHub
 
 ## License

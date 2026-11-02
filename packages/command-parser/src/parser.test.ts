@@ -153,10 +153,16 @@ describe("parseCommand", () => {
       });
     });
 
-    it("explains that real but unsupported git commands are coming", () => {
-      expect(errorOf("git clone https://example.com/repo.git").message).toBe(
-        "git: 'clone' is not available in GitDojo yet.",
-      );
+    it("parses git clone and git config like every other supported command", () => {
+      expect(parsed("git clone gitdojo://simulated/origin.git .")).toMatchObject({
+        command: "clone",
+        args: ["gitdojo://simulated/origin.git", "."],
+      });
+      expect(parsed("git config --global user.name Ada")).toMatchObject({
+        command: "config",
+        flags: { global: true },
+        args: ["user.name", "Ada"],
+      });
     });
 
     it("records where `--` separates paths from revisions", () => {

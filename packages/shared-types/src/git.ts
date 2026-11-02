@@ -32,6 +32,7 @@ export type GitErrorCode =
   | "DIVERGENT_BRANCHES"
   | "EDITOR_OPEN"
   | "INVALID_TODO"
+  | "CONFIG_NOT_SET"
   | "UNKNOWN";
 
 /**
@@ -56,6 +57,12 @@ export interface GitAuthor {
   name: string;
   email: string;
 }
+
+/** Who commits are by until the learner runs `git config user.name` / `user.email`. */
+export const DEFAULT_GIT_AUTHOR: GitAuthor = {
+  name: "GitDojo Learner",
+  email: "learner@gitdojo.local",
+};
 
 /**
  * A beginner-friendly explanation of what a command's outcome means. The terminal always shows

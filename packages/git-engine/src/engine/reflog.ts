@@ -1,7 +1,7 @@
 import { hasErrorCode } from "../filesystem/fs-errors";
 import { ensureDirectory } from "../filesystem/fs-helpers";
 import { type GitContext } from "./context";
-import { DEFAULT_AUTHOR } from "./git-engine";
+import { learnerIdentity } from "./config";
 
 export const ZERO_OID = "0".repeat(40);
 
@@ -42,7 +42,7 @@ async function append(ctx: GitContext, ref: string, record: ReflogRecord): Promi
   } catch (error) {
     if (!hasErrorCode(error, "ENOENT")) throw error;
   }
-  const { name, email } = DEFAULT_AUTHOR;
+  const { name, email } = await learnerIdentity(ctx);
   const line = `${record.oldOid} ${record.newOid} ${name} <${email}> ${String(record.timestamp)} ${timezone(new Date(record.timestamp * 1000))}\t${record.message.split("\n")[0] ?? ""}\n`;
   await ctx.fs.promises.writeFile(path, existing + line, "utf8");
 }

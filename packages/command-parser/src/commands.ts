@@ -26,12 +26,13 @@ export const GIT_COMMAND_SPECS = {
   commit: {
     name: "commit",
     summary: "Record staged changes (--amend: replace the latest commit)",
-    usage: 'git commit [-m "<message>"] [--amend [--no-edit]]',
+    usage: 'git commit [-m "<message>"] [--amend [--no-edit] [--reset-author]]',
     // `-m` is checked by the engine: while concluding a merge, `git commit` alone is enough.
     flags: [
       { name: "m", aliases: ["message"], takesValue: true, repeatSeparator: "\n\n" },
       { name: "amend", takesValue: false },
       { name: "no-edit", takesValue: false },
+      { name: "reset-author", takesValue: false },
     ],
     acceptsArguments: false,
   },
@@ -56,11 +57,10 @@ export const GIT_COMMAND_SPECS = {
   },
   mv: {
     name: "mv",
-    summary: "Move a tracked file and stage the rename",
-    usage: "git mv <source> <destination>",
-    flags: [],
+    summary: "Move or rename tracked files and directories, staging the rename",
+    usage: "git mv [-f] <source>... <destination>",
+    flags: [{ name: "f", aliases: ["force"], takesValue: false }],
     acceptsArguments: true,
-    maxArguments: 2,
   },
   branch: {
     name: "branch",
@@ -220,13 +220,36 @@ export const GIT_COMMAND_SPECS = {
     acceptsArguments: true,
     maxArguments: 2,
   },
+  config: {
+    name: "config",
+    summary: "Read or set options such as user.name (--global: for every repository)",
+    usage: "git config [--global] [--get | --unset | --list] <name> [<value>]",
+    flags: [
+      { name: "global", takesValue: false },
+      { name: "local", takesValue: false },
+      { name: "list", aliases: ["l"], takesValue: false },
+      { name: "get", takesValue: false },
+      { name: "unset", takesValue: false },
+    ],
+    acceptsArguments: true,
+    maxArguments: 2,
+  },
   remote: {
     name: "remote",
-    summary: "List remotes (-v: with their URLs)",
-    usage: "git remote [-v]",
+    summary: "List (-v: with URLs), add, remove, rename or re-point remotes",
+    usage:
+      "git remote [-v] | add <name> <url> | remove <name> | rename <old> <new> | set-url <name> <url>",
     flags: [{ name: "v", aliases: ["verbose"], takesValue: false }],
     acceptsArguments: true,
     maxArguments: 3,
+  },
+  clone: {
+    name: "clone",
+    summary: "Copy a (simulated) repository into this empty workspace",
+    usage: "git clone <url> [.]",
+    flags: [],
+    acceptsArguments: true,
+    maxArguments: 2,
   },
   fetch: {
     name: "fetch",
@@ -250,9 +273,16 @@ export const GIT_COMMAND_SPECS = {
   },
   push: {
     name: "push",
-    summary: "Publish a branch to a remote (-u: remember it as upstream)",
-    usage: "git push [-u] [<remote> [<branch>]]",
-    flags: [{ name: "u", aliases: ["set-upstream"], takesValue: false }],
+    summary: "Publish a branch (-u: remember it as upstream; --tags: tags) to a remote",
+    usage:
+      "git push [-u] [--force-with-lease | --force] [--delete] [--tags] [<remote> [<branch | tag>]]",
+    flags: [
+      { name: "u", aliases: ["set-upstream"], takesValue: false },
+      { name: "f", aliases: ["force"], takesValue: false },
+      { name: "force-with-lease", takesValue: false },
+      { name: "d", aliases: ["delete"], takesValue: false },
+      { name: "tags", takesValue: false },
+    ],
     acceptsArguments: true,
     maxArguments: 2,
   },
@@ -265,7 +295,7 @@ export function isSupportedGitCommand(command: string): command is SupportedGitC
 }
 
 /** Real Git commands that later GitDojo phases will support; they get a friendlier message. */
-export const PLANNED_GIT_COMMANDS: ReadonlySet<string> = new Set(["clone", "config"]);
+export const PLANNED_GIT_COMMANDS: ReadonlySet<string> = new Set<string>();
 
 /** Terminal built-ins. They are parsed like any other input and never reach an OS shell. */
 export const BUILTIN_PROGRAMS = {

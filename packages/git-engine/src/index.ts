@@ -11,6 +11,8 @@ export { REBASE_USAGE } from "./commands/rebase";
 export { TAG_USAGE, isValidTagName } from "./commands/tag";
 export { RESTORE_USAGE } from "./commands/restore";
 export { RM_USAGE } from "./commands/rm";
+export { CONFIG_USAGE } from "./commands/config";
+export { CLONE_USAGE } from "./commands/clone";
 export { formatFileDiff, diffHunks } from "./engine/diff";
 export { hasConflictMarkers, mergeText } from "./engine/text-merge";
 export { classifyStatusRow, type StatusRow } from "./engine/status-matrix";

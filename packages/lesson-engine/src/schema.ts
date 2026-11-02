@@ -69,6 +69,14 @@ export const setupSchema = z.strictObject({
       commits: z.array(setupCommitSchema).optional(),
     })
     .optional(),
+  server: z
+    .strictObject({
+      name: z
+        .string()
+        .regex(SLUG_PATTERN, "must be a simple server name such as origin")
+        .optional(),
+    })
+    .optional(),
   commands: z
     .array(
       z.string().superRefine((command, ctx) => {
@@ -190,6 +198,25 @@ export function checkSetup(setup: Setup, ctx: z.RefinementCtx): void {
     }
     for (const [index, commit] of (setup.remote.commits ?? []).entries()) {
       checkPaths(commit.files, ["setup", "remote", "commits", index, "files"]);
+    }
+  }
+  if (setup.server) {
+    if (commits.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["setup", "server"],
+        message: "a setup server needs at least one setup commit to serve",
+      });
+    }
+    // The workspace must start empty for `git clone`: nothing else may be set up in it.
+    for (const key of ["remote", "files", "directories", "commands"] as const) {
+      if (setup[key] !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["setup", key],
+          message: `\`${key}\` cannot be combined with \`server\`: the workspace starts empty`,
+        });
+      }
     }
   }
   if (setup.currentBranch !== undefined && !seen.has(setup.currentBranch)) {

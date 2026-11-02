@@ -433,7 +433,75 @@ describe("IsomorphicGitEngine", () => {
       await git.commit({ message: "Initial commit" });
       const result = await git.mv(["README.md", "copy.md"]);
       expect(result.error?.code).toBe("INVALID_ARGUMENT");
-      expect(result.output).toContain("already exists");
+      expect(result.output).toBe(
+        "fatal: destination exists, source=README.md, destination=copy.md",
+      );
+      // -f overwrites it, as in Git.
+      expect((await git.mv(["README.md", "copy.md"], { force: true })).ok).toBe(true);
+    });
+
+    it("refuses untracked sources with Git's message", async () => {
+      const { git } = await createTestWorkspace({ "README.md": README, "notes.md": "x\n" });
+      await git.init();
+      await git.add(["README.md"]);
+      await git.commit({ message: "Initial commit" });
+      expect((await git.mv(["notes.md", "docs.md"])).output).toBe(
+        "fatal: not under version control, source=notes.md, destination=docs.md",
+      );
+    });
+
+    it("moves a directory: tracked files renamed, untracked ones carried along", async () => {
+      const { git, files, workspaceId } = await createTestWorkspace({
+        "src/app.js": "app\n",
+        "src/lib/util.js": "util\n",
+      });
+      await git.init();
+      await git.add(["src"]);
+      await git.commit({ message: "Initial commit" });
+      await files.writeFile(workspaceId, "src/scratch.txt", "draft\n");
+
+      const result = await git.mv(["src", "lib"]);
+      expect(result.ok, result.output).toBe(true);
+      expect(result.output).toBe(
+        "Renamed src/app.js -> lib/app.js\nRenamed src/lib/util.js -> lib/lib/util.js",
+      );
+      expect(await files.exists(workspaceId, "src")).toBe(false);
+      expect(await files.readFile(workspaceId, "lib/scratch.txt")).toBe("draft\n");
+      const entries = (await git.status()).data?.entries ?? [];
+      expect(entries.map((e) => [e.path, e.staged, e.unstaged])).toEqual(
+        expect.arrayContaining([
+          ["lib/app.js", "added", null],
+          ["lib/lib/util.js", "added", null],
+          ["lib/scratch.txt", null, "untracked"],
+          ["src/app.js", "deleted", null],
+        ]),
+      );
+    });
+
+    it("moves several files into a directory, keeping unstaged edits unstaged", async () => {
+      const { git, files, workspaceId } = await createTestWorkspace({
+        "a.md": "a\n",
+        "b.md": "b\n",
+        "docs/index.md": "docs\n",
+      });
+      await git.init();
+      await git.add(["."]);
+      await git.commit({ message: "Initial commit" });
+      await files.writeFile(workspaceId, "a.md", "a, edited\n");
+
+      expect((await git.mv(["a.md", "b.md", "docs"])).ok).toBe(true);
+      const entries = (await git.status()).data?.entries ?? [];
+      expect(entries.find((e) => e.path === "docs/a.md")).toMatchObject({
+        staged: "added",
+        unstaged: "modified",
+      });
+      expect(await files.readFile(workspaceId, "docs/a.md")).toBe("a, edited\n");
+      expect((await git.mv(["docs/a.md", "docs/b.md", "nowhere"])).output).toBe(
+        "fatal: destination 'nowhere' is not a directory",
+      );
+      expect((await git.mv(["docs", "docs/inner"])).output).toContain(
+        "can not move directory into itself",
+      );
     });
   });
 

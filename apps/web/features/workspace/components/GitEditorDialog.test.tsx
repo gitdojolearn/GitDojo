@@ -16,9 +16,12 @@ describe("GitEditorDialog", () => {
     render(<GitEditorDialog />);
     let decision: Promise<unknown> = Promise.resolve();
     act(() => {
-      decision = useGitEditorStore
-        .getState()
-        .open({ file: "git-rebase-todo", purpose: "todo", content: "pick abc1234 wip\n" });
+      decision = useGitEditorStore.getState().open({
+        file: "git-rebase-todo",
+        purpose: "todo",
+        operation: "rebase",
+        content: "pick abc1234 wip\n",
+      });
     });
     expect(await screen.findByRole("dialog")).toHaveAccessibleName(/git-rebase-todo/);
     const text = screen.getByLabelText("Rebase todo list");
@@ -38,6 +41,7 @@ describe("GitEditorDialog", () => {
       decision = useGitEditorStore.getState().open({
         file: "COMMIT_EDITMSG",
         purpose: "message",
+        operation: "rebase",
         content: "wip\n",
         error: "Aborting commit due to empty commit message.",
       });
@@ -52,14 +56,46 @@ describe("GitEditorDialog", () => {
     await expect(decision).resolves.toEqual({ action: "abort" });
   });
 
+  it("names the message and the way out for amends and annotated tags", async () => {
+    const user = userEvent.setup();
+    render(<GitEditorDialog />);
+    let decision: Promise<unknown> = Promise.resolve();
+    act(() => {
+      decision = useGitEditorStore.getState().open({
+        file: "TAG_EDITMSG",
+        purpose: "message",
+        operation: "tag",
+        content: "\n# Write a message for tag:\n",
+      });
+    });
+    expect(await screen.findByLabelText("Tag message")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel tag" }));
+    await expect(decision).resolves.toEqual({ action: "abort" });
+
+    act(() => {
+      decision = useGitEditorStore.getState().open({
+        file: "COMMIT_EDITMSG",
+        purpose: "message",
+        operation: "commit",
+        content: "Add README\n",
+      });
+    });
+    expect(await screen.findByLabelText("Commit message")).toHaveValue("Add README\n");
+    await user.click(screen.getByRole("button", { name: "Cancel commit" }));
+    await expect(decision).resolves.toEqual({ action: "abort" });
+  });
+
   it("saves with Ctrl+Enter", async () => {
     const user = userEvent.setup();
     render(<GitEditorDialog />);
     let decision: Promise<unknown> = Promise.resolve();
     act(() => {
-      decision = useGitEditorStore
-        .getState()
-        .open({ file: "COMMIT_EDITMSG", purpose: "message", content: "Add search\n" });
+      decision = useGitEditorStore.getState().open({
+        file: "COMMIT_EDITMSG",
+        purpose: "message",
+        operation: "rebase",
+        content: "Add search\n",
+      });
     });
     await screen.findByRole("dialog");
     await user.keyboard("{Control>}{Enter}{/Control}");

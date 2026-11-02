@@ -38,6 +38,7 @@ export async function readStatusData(ctx: GitContext): Promise<GitStatusData> {
               branch: merge.rebase.branch,
               onto: merge.rebase.onto,
               ...(merge.rebase.interactive ? { interactive: true } : {}),
+              ...(merge.rebase.stopped ? { stopped: merge.rebase.stopped } : {}),
             },
           }
         : {}),
@@ -111,6 +112,15 @@ function operationNotice(merge: NonNullable<GitStatusData["merge"]>): string[] {
     case "rebase": {
       const branch = merge.rebase?.branch ?? "HEAD";
       const onto = shortOid(merge.rebase?.onto ?? merge.commit);
+      if (merge.rebase?.stopped) {
+        return [
+          merge.rebase.stopped === "edit"
+            ? `You are currently editing a commit while rebasing branch '${branch}' on '${onto}'.`
+            : `You are currently rebasing branch '${branch}' on '${onto}'.`,
+          '  (use "git commit --amend" to amend the current commit)',
+          '  (use "git rebase --continue" once you are satisfied with your changes)',
+        ];
+      }
       return [
         `You are currently rebasing branch '${branch}' on '${onto}'.`,
         done

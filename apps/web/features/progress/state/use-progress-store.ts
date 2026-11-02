@@ -84,6 +84,18 @@ interface ProgressState {
   /** When the account last confirmed this device's progress. */
   syncedAt: number | null;
   verificationNotice: VerificationNotice;
+  /**
+   * Completions made in this browser while signed out that the signed-in account does not have.
+   * Offered, never added on their own: on a shared computer they may be someone else's.
+   */
+  anonymousOffer: AnonymousProgressOffer | null;
+}
+
+/** How much of this browser's signed-out progress could be added to the account. */
+export interface AnonymousProgressOffer {
+  lessons: number;
+  challenges: number;
+  practice: number;
 }
 
 /**
@@ -104,6 +116,7 @@ export const useProgressStore = create<ProgressState>()(() => ({
   sync: "off",
   syncedAt: null,
   verificationNotice: null,
+  anonymousOffer: null,
 }));
 
 let repository: ProgressRepository | null = null;
@@ -819,11 +832,116 @@ export function initProgress(
     if (account.kind === "account") void retryPendingVerification();
     // This device's own activity has not reached the account yet, however old it is.
     if (account.kind !== "anonymous") void syncNow();
+    if (account.kind === "account") {
+      void offerAnonymousProgress(catalog, createRepository, account.accountId).catch(
+        (error: unknown) => {
+          console.warn("[gitdojo] could not read signed-out progress", error);
+        },
+      );
+    }
     const queued = pending;
     pending = [];
     for (const action of queued) void recordProgress(action);
   })();
   return initialization;
+}
+
+/** The signed-out progress on offer, and the decision key it is remembered under. */
+let anonymousTransfer: { snapshot: LocalProgress; accountId: string; fingerprint: string } | null =
+  null;
+
+const TRANSFER_DECISION_PREFIX = "gitdojo:anonymous-transfer:";
+
+function readTransferDecision(accountId: string): string | null {
+  try {
+    return window.localStorage.getItem(`${TRANSFER_DECISION_PREFIX}${accountId}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers which set of completions was added or declined, so the same offer never repeats. */
+function rememberTransferDecision(accountId: string, fingerprint: string): void {
+  try {
+    window.localStorage.setItem(`${TRANSFER_DECISION_PREFIX}${accountId}`, fingerprint);
+  } catch {
+    // Blocked site data: the offer may come back on the next visit, which is harmless.
+  }
+}
+
+/**
+ * After an account loads: looks at this browser's signed-out progress and, if it has completions
+ * the account lacks (and that exact set was not added or declined before), offers to add them.
+ */
+async function offerAnonymousProgress(
+  catalog: ProgressCatalog,
+  createRepository: (catalog: ProgressCatalog, owner: ProgressOwner) => ProgressRepository,
+  accountId: string,
+): Promise<void> {
+  const anonymous = createRepository(catalog, ANONYMOUS);
+  let snapshot: LocalProgress;
+  try {
+    snapshot = (await anonymous.load()).progress;
+  } finally {
+    anonymous.close();
+  }
+  const current = useProgressStore.getState().progress;
+  if (!current || useProgressStore.getState().mode !== "account") return;
+  const lessonIndex = indexLessons(catalog);
+  const challengeIds = new Set(catalog.challenges.map((challenge) => challenge.id));
+  const practiceIds = new Set(catalog.practice.map((task) => task.id));
+  const missing = {
+    lessons: Object.keys(snapshot.completedLessons).filter(
+      (id) => lessonIndex.has(id) && current.completedLessons[id] === undefined,
+    ),
+    challenges: Object.keys(snapshot.completedChallenges).filter(
+      (id) => challengeIds.has(id) && current.completedChallenges[id] === undefined,
+    ),
+    practice: Object.keys(snapshot.completedPractice).filter(
+      (id) => practiceIds.has(id) && current.completedPractice[id] === undefined,
+    ),
+  };
+  const fingerprint = [
+    ...missing.lessons.map((id) => `lesson:${id}`),
+    ...missing.challenges.map((id) => `challenge:${id}`),
+    ...missing.practice.map((id) => `practice:${id}`),
+  ]
+    .sort()
+    .join(",");
+  if (fingerprint === "" || readTransferDecision(accountId) === fingerprint) return;
+  anonymousTransfer = { snapshot, accountId, fingerprint };
+  useProgressStore.setState({
+    anonymousOffer: {
+      lessons: missing.lessons.length,
+      challenges: missing.challenges.length,
+      practice: missing.practice.length,
+    },
+  });
+}
+
+/**
+ * Adds the offered signed-out progress to the account, exactly like restoring a backup of it:
+ * completions are uploaded as learner-reported (never verified), XP is recomputed by the
+ * server, and the anonymous record in this browser is left as it was.
+ */
+export async function addAnonymousProgress(): Promise<RestoreProgressResult> {
+  const transfer = anonymousTransfer;
+  if (!transfer) return "not-ready";
+  const result = await restoreProgressBackup(transfer.snapshot);
+  // Merging again is harmless, so after a failed sync the offer stays up to try again.
+  if (result !== "ok") return result;
+  rememberTransferDecision(transfer.accountId, transfer.fingerprint);
+  anonymousTransfer = null;
+  useProgressStore.setState({ anonymousOffer: null });
+  return result;
+}
+
+/** "Not now": the same completions are not offered again on this browser. */
+export function dismissAnonymousProgress(): void {
+  const transfer = anonymousTransfer;
+  if (transfer) rememberTransferDecision(transfer.accountId, transfer.fingerprint);
+  anonymousTransfer = null;
+  useProgressStore.setState({ anonymousOffer: null });
 }
 
 /** Clears learning progress. Playground repositories and settings are not touched. */
@@ -869,7 +987,9 @@ export function resetProgressStoreForTests(): void {
     sync: "off",
     syncedAt: null,
     verificationNotice: null,
+    anonymousOffer: null,
   });
+  anonymousTransfer = null;
 }
 
 const EMPTY: ReadonlySet<string> = new Set();

@@ -6,14 +6,17 @@ import {
   runDeleteBranch,
   runShowBranches,
 } from "../commands/branch";
+import { runClone, runSetupCloneSource } from "../commands/clone";
 import { runCommit } from "../commands/commit";
+import { runConfig } from "../commands/config";
 import { runDiff } from "../commands/diff";
 import { runInit } from "../commands/init";
 import { runLog } from "../commands/log";
 import { runShow } from "../commands/show";
 import { runMv } from "../commands/mv";
 import { runPick, runSequencer } from "../commands/pick";
-import { runCloseEditor, runRebase, runRebaseControl } from "../commands/rebase";
+import { runAbortEditor, runCloseEditor } from "../commands/editor";
+import { runRebase, runRebaseControl } from "../commands/rebase";
 import {
   runFetch,
   runListRemotes,
@@ -22,6 +25,7 @@ import {
   runSetupRemote,
   runSetupRemoteCommit,
 } from "../commands/remote";
+import { runRemoteCommand } from "../commands/remote-config";
 import { runCreateTag, runDeleteTag, runListTags } from "../commands/tag";
 import { runReflog } from "../commands/reflog";
 import { runReset } from "../commands/reset";
@@ -53,6 +57,7 @@ import {
   type GitDetachOptions,
   type GitDiffOptions,
   type GitDiffResult,
+  type GitEditorResult,
   type GitPickResult,
   type GitRebaseResult,
   type GitReflogResult,
@@ -66,9 +71,13 @@ import {
   type GitStashPushOptions,
   type GitStashResult,
   type GitBranchListResult,
+  type GitCloneResult,
   type GitCommitInput,
   type GitCommitResult,
   type GitEngine,
+  type GitConfigOptions,
+  type GitConfigResult,
+  type GitInitOptions,
   type GitInitResult,
   type GitLogOptions,
   type GitLogResult,
@@ -85,6 +94,7 @@ import {
   type GitPushOptions,
   type GitPushResult,
   type GitRebaseOptions,
+  type GitRemoteCommand,
   type GitRemoteResult,
   type GitSetupRemoteCommitInput,
   type GitSetupRemoteOptions,
@@ -136,8 +146,8 @@ export class IsomorphicGitEngine implements GitEngine {
     this.ctx = { fs, dir: workspaceRoot(workspaceId), workspaceId, displayDir };
   }
 
-  init(): Promise<GitInitResult> {
-    return mutating(this.ctx, () => runInit(this.ctx));
+  init(options?: GitInitOptions): Promise<GitInitResult> {
+    return mutating(this.ctx, () => runInit(this.ctx, options));
   }
 
   status(): Promise<GitStatusResult> {
@@ -160,8 +170,8 @@ export class IsomorphicGitEngine implements GitEngine {
     return guard(() => runShow(this.ctx, spec));
   }
 
-  mv(paths: string[]): Promise<GitMvResult> {
-    return mutating(this.ctx, () => runMv(this.ctx, paths));
+  mv(paths: string[], options?: { force?: boolean }): Promise<GitMvResult> {
+    return mutating(this.ctx, () => runMv(this.ctx, paths, options));
   }
 
   showBranches(options?: GitShowBranchesOptions): Promise<GitBranchListResult> {
@@ -256,8 +266,12 @@ export class IsomorphicGitEngine implements GitEngine {
     return mutating(this.ctx, () => runRebase(this.ctx, upstream, options));
   }
 
-  closeEditor(content: string): Promise<GitRebaseResult> {
+  closeEditor(content: string): Promise<GitEditorResult> {
     return guard(() => runCloseEditor(this.ctx, content));
+  }
+
+  abortEditor(): Promise<GitEditorResult> {
+    return guard(() => runAbortEditor(this.ctx));
   }
 
   listTags(options?: GitTagListOptions): Promise<GitTagResult> {
@@ -272,8 +286,24 @@ export class IsomorphicGitEngine implements GitEngine {
     return mutating(this.ctx, () => runDeleteTag(this.ctx, name));
   }
 
+  config(options: GitConfigOptions): Promise<GitConfigResult> {
+    return guard(() => runConfig(this.ctx, options));
+  }
+
   listRemotes(options?: { verbose?: boolean }): Promise<GitRemoteResult> {
     return guard(() => runListRemotes(this.ctx, options));
+  }
+
+  remote(command: GitRemoteCommand): Promise<GitRemoteResult> {
+    return mutating(this.ctx, () => runRemoteCommand(this.ctx, command));
+  }
+
+  clone(url: string, directory?: string): Promise<GitCloneResult> {
+    return mutating(this.ctx, () => runClone(this.ctx, url, directory));
+  }
+
+  setupCloneSource(name: string): Promise<GitCommandResult> {
+    return guard(() => runSetupCloneSource(this.ctx, name));
   }
 
   fetch(remote?: string): Promise<GitFetchResult> {

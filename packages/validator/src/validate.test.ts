@@ -155,6 +155,43 @@ describe("validators", () => {
     });
   });
 
+  describe("commit_author_set", () => {
+    const ada = (message: string, oid: string): CommitState => ({
+      ...commit(message, oid),
+      authorName: "Ada Lovelace",
+      authorEmail: "ada@example.com",
+    });
+
+    it("passes once a commit is by someone other than GitDojo's default identity", async () => {
+      expect((await check({ type: "commit_author_set" }, state())).reason).toBe(
+        "There are no commits yet.",
+      );
+      const before = state({ commits: [commit("Add README")] });
+      const failed = await check({ type: "commit_author_set" }, before);
+      expect(failed.passed).toBe(false);
+      expect(failed.reason).toContain("user.name still has GitDojo's default");
+      const after = state({ commits: [ada("Add soup", "b".repeat(40)), commit("Add README")] });
+      expect((await check({ type: "commit_author_set" }, after)).passed).toBe(true);
+    });
+
+    it("needs both the name and the email changed", async () => {
+      const nameOnly = { ...commit("Add README"), authorName: "Ada Lovelace" };
+      const result = await check({ type: "commit_author_set" }, state({ commits: [nameOnly] }));
+      expect(result).toMatchObject({ passed: false });
+      expect(result.reason).toContain("user.email");
+    });
+
+    it("checks the commit with the given message", async () => {
+      const repo = state({ commits: [ada("Add soup", "b".repeat(40)), commit("Add README")] });
+      expect((await check({ type: "commit_author_set", message: "Add README" }, repo)).passed).toBe(
+        false,
+      );
+      expect((await check({ type: "commit_author_set", message: "Add soup" }, repo)).passed).toBe(
+        true,
+      );
+    });
+  });
+
   describe("commit_exists", () => {
     it("fails without commits", async () => {
       expect((await check({ type: "commit_exists" }, state())).passed).toBe(false);

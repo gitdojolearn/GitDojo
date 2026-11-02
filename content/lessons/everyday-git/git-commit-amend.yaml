@@ -113,6 +113,13 @@ content:
           - "`--no-edit` keeps the existing message"
           - Folds the forgotten change into the commit where it belongs
 
+  - type: callout
+    tone: note
+    body: >-
+      With neither `-m` nor `--no-edit`, `git commit --amend` opens the current message in an
+      editor window, as Git opens your editor. Change it, then **Save and close**; **Cancel commit**
+      leaves the commit as it was.
+
   - type: example
     title: What the reflog shows afterwards
     command: git reflog
