@@ -3,6 +3,7 @@ import {
   type BranchState,
   type CompletionAttemptBinding,
   type CompletionEvidence,
+  DEFAULT_GIT_AUTHOR,
   type GitAuthor,
   type GitCommandResult,
   type RepositoryState,
@@ -11,10 +12,7 @@ import {
 
 export const DEFAULT_BRANCH = "main";
 
-export const DEFAULT_AUTHOR: GitAuthor = {
-  name: "GitDojo Learner",
-  email: "learner@gitdojo.local",
-};
+export const DEFAULT_AUTHOR: GitAuthor = DEFAULT_GIT_AUTHOR;
 
 export type UnstagedChange = "modified" | "deleted" | "untracked";
 
@@ -70,7 +68,13 @@ export interface GitStatusData {
     commit: string;
     unresolved: { path: string; kind: ConflictKind }[];
     /** Rebases: the branch being rebased and where to, and whether it is `git rebase -i`. */
-    rebase?: { branch: string; onto: string; interactive?: boolean };
+    rebase?: {
+      branch: string;
+      onto: string;
+      interactive?: boolean;
+      /** `edit` or `break` stopped it, with nothing to resolve. */
+      stopped?: "edit" | "break";
+    };
   } | null;
 }
 
@@ -124,6 +128,9 @@ export interface GitCommitInput {
   amend?: boolean;
   /** Reuse the existing message when amending (or when concluding a merge). */
   noEdit?: boolean;
+  /** `--amend --reset-author`: the amended commit is by the learner, as configured now. */
+  resetAuthor?: boolean;
+  /** Defaults to the learner's `user.name` / `user.email` (GitDojo's own identity if unset). */
   author?: GitAuthor;
   /** Seconds since the Unix epoch. Defaults to now; lesson setup back-dates its commits. */
   timestamp?: number;
@@ -144,11 +151,13 @@ export interface GitTagInfo {
   message?: string;
 }
 
-/** A simulated remote: its URL and the branches its (pretend) server has right now. */
+/** A simulated remote: its URL and the branches and tags its (pretend) server has right now. */
 export interface GitRemoteInfo {
   name: string;
   url: string;
   branches: { name: string; oid: string }[];
+  /** `oid` is the tag object for an annotated tag, the commit for a lightweight one. */
+  tags: { name: string; oid: string }[];
 }
 
 /** `refs/remotes/<remote>/<branch>`, shown as `origin/main`. */
@@ -159,10 +168,12 @@ export interface GitRemoteTrackingInfo {
   oid: string;
 }
 
-/** Git is waiting for the learner to edit a file (`git rebase -i`). */
+/** Git is waiting for the learner to edit a file (`git rebase -i`, `git commit --amend`...). */
 export interface GitPendingEditor {
   file: string;
   purpose: "todo" | "message";
+  /** What the file is for: a rebase plan or message, an amended commit's message, or a tag's. */
+  operation: "rebase" | "commit" | "tag";
   content: string;
   /** Why the last attempt to close the editor was refused. */
   error?: string;
@@ -200,6 +211,22 @@ export interface GitRemoteData {
   remotes: GitRemoteInfo[];
 }
 
+/** `git remote add | remove | rename | set-url | get-url`. */
+export type GitRemoteCommand =
+  | { action: "add"; name: string; url: string }
+  | { action: "remove"; name: string }
+  | { action: "rename"; name: string; newName: string }
+  | { action: "set-url"; name: string; url: string }
+  | { action: "get-url"; name: string };
+
+export interface GitCloneData {
+  remote: string;
+  /** The branch checked out, or `null` for an empty repository. */
+  branch: string | null;
+  oid: string | null;
+  shortOid?: string;
+}
+
 export interface GitFetchData {
   /** Remote-tracking branches that moved, with where from (`null`: new) and where to. */
   updated: { ref: string; from: string | null; to: string }[];
@@ -211,12 +238,25 @@ export interface GitPushOptions {
   branch?: string;
   /** `-u` / `--set-upstream`: remember the remote branch as this branch's upstream. */
   setUpstream?: boolean;
+  /**
+   * `--force`: replace the remote branch even if that loses its commits. `lease`
+   * (`--force-with-lease`): only if the remote branch is still where `origin/<branch>` says, so
+   * nobody else's work is lost.
+   */
+  force?: "force" | "lease";
+  /** `--delete` (or `:<branch>`): delete `branch` on the remote. */
+  delete?: boolean;
+  /** `--tags`: push every tag. A tag name given as `branch` pushes that tag. */
+  tags?: boolean;
 }
 
 export interface GitPushData {
-  status: "up-to-date" | "pushed" | "rejected";
+  status: "up-to-date" | "pushed" | "rejected" | "deleted";
   remote: string;
+  /** The branch pushed or deleted; for tag pushes, the tags' names joined with spaces. */
   branch: string;
+  /** `--force` or `--force-with-lease` replaced commits the remote had. */
+  forced?: boolean;
   from?: string | null;
   to?: string;
 }
@@ -251,6 +291,26 @@ export interface GitSetupRemoteCommitInput {
   files: Record<string, string | null>;
   author?: GitAuthor;
   timestamp?: number;
+}
+
+/** `git config`: which setting to read or change, and where. */
+export interface GitConfigOptions {
+  action: "get" | "set" | "unset" | "list";
+  /** `user.name`, `init.defaultBranch`, `remote.origin.url`; unused for `list`. */
+  key?: string;
+  /** `set` only. */
+  value?: string;
+  /** `--global` (`~/.gitconfig`) or `--local` (`.git/config`). Unset: Git's default for the action. */
+  scope?: "global" | "local";
+}
+
+export interface GitConfigData {
+  entries: { key: string; value: string; scope: "global" | "local" }[];
+}
+
+export interface GitInitOptions {
+  /** The first branch's name. Defaults to `init.defaultBranch`, else `main`. */
+  defaultBranch?: string;
 }
 
 export interface GitBranchListData {
@@ -425,14 +485,22 @@ export interface GitReflogData {
 }
 
 export interface GitRebaseOptions {
-  /** `-i`: let the learner edit the plan (pick, reword, squash, fixup, drop) first. */
+  /** `-i`: let the learner edit the plan (pick, reword, edit, squash, fixup, drop...) first. */
   interactive?: boolean;
 }
 
 export interface GitRebaseData {
   /** `editing`: Git is waiting for the learner to close an editor (see the snapshot's `editor`). */
   status:
-    "up-to-date" | "fast-forward" | "rebased" | "conflict" | "aborted" | "editing" | "nothing";
+    | "up-to-date"
+    | "fast-forward"
+    | "rebased"
+    | "conflict"
+    | "aborted"
+    | "editing"
+    | "nothing"
+    /** `edit` or `break` stopped the rebase; `git rebase --continue` goes on. */
+    | "stopped";
   /** The rebased branch's new tip (or the original one after `--abort`). */
   oid?: string;
   conflicts?: string[];
@@ -485,7 +553,12 @@ export interface GitShowData {
   files: GitFileDiff[];
 }
 export type GitShowResult = GitCommandResult<GitShowData>;
-export type GitMvResult = GitCommandResult<{ source: string; destination: string }>;
+export type GitMvResult = GitCommandResult<{
+  source: string;
+  destination: string;
+  /** Every file moved: tracked ones are staged as renames, untracked ones just come along. */
+  moves: { source: string; destination: string; tracked: boolean }[];
+}>;
 export type GitBranchListResult = GitCommandResult<GitBranchListData>;
 export type GitBranchCreateResult = GitCommandResult<GitBranchCreateData>;
 export type GitSwitchResult = GitCommandResult<GitSwitchData>;
@@ -499,11 +572,22 @@ export type GitPickResult = GitCommandResult<GitPickData>;
 export type GitStashResult = GitCommandResult<GitStashData>;
 export type GitReflogResult = GitCommandResult<GitReflogData>;
 export type GitRebaseResult = GitCommandResult<GitRebaseData>;
+
+/** What closing (or abandoning) Git's editor did: carried a rebase on, or made a commit or tag. */
+export interface GitEditorData {
+  status: GitRebaseData["status"] | "committed" | "tagged";
+  /** The rebased branch's tip, the new commit, or the tagged commit. */
+  oid?: string;
+  conflicts?: string[];
+}
+export type GitEditorResult = GitCommandResult<GitEditorData>;
 export type GitTagResult = GitCommandResult<GitTagData>;
 export type GitRemoteResult = GitCommandResult<GitRemoteData>;
 export type GitFetchResult = GitCommandResult<GitFetchData>;
 export type GitPushResult = GitCommandResult<GitPushData>;
 export type GitPullResult = GitCommandResult<GitPullData>;
+export type GitCloneResult = GitCommandResult<GitCloneData>;
+export type GitConfigResult = GitCommandResult<GitConfigData>;
 
 export interface GitRmOptions {
   /** `--cached`: stop tracking the file but keep it on disk. */
@@ -525,15 +609,16 @@ export type GitSequencerAction = "continue" | "abort" | "skip";
  */
 export interface GitEngine {
   readonly workspaceId: string;
-  init(): Promise<GitInitResult>;
+  /** `git init`. Lesson setup passes `defaultBranch` so learner settings never change it. */
+  init(options?: GitInitOptions): Promise<GitInitResult>;
   status(): Promise<GitStatusResult>;
   add(paths: string[]): Promise<GitAddResult>;
   commit(input: GitCommitInput): Promise<GitCommitResult>;
   log(options?: GitLogOptions): Promise<GitLogResult>;
   /** `git show [<commit> | <commit>:<path>]`: one commit and its first-parent diff or file. */
   show(spec?: string): Promise<GitShowResult>;
-  /** `git mv <source> <destination>` stages a tracked-file rename. */
-  mv(paths: string[]): Promise<GitMvResult>;
+  /** `git mv [-f] <source>... <destination>`: renames tracked files or directories. */
+  mv(paths: string[], options?: { force?: boolean }): Promise<GitMvResult>;
   /** `git branch [-r | -a] [-v]`: prints the branch list, marking the current branch with `*`. */
   showBranches(options?: GitShowBranchesOptions): Promise<GitBranchListResult>;
   /** `git branch <name> [<start-point>]`: creates a branch (at HEAD by default) without switching. */
@@ -596,17 +681,29 @@ export interface GitEngine {
   rebaseControl(action: GitSequencerAction): Promise<GitRebaseResult>;
   /**
    * The learner saved and closed the editor Git was waiting for. Carries the interactive rebase
-   * on; it may stop again for another editor, a conflict, or an invalid todo list.
+   * on (it may stop again for another editor, a conflict, or an invalid todo list), or makes the
+   * amended commit or annotated tag the editor was opened for.
    */
-  closeEditor(content: string): Promise<GitRebaseResult>;
+  closeEditor(content: string): Promise<GitEditorResult>;
+  /**
+   * The learner closed the editor without saving: the interactive rebase is aborted
+   * (`git rebase --abort`), or the commit or tag is not made.
+   */
+  abortEditor(): Promise<GitEditorResult>;
   /** `git tag [-l [<pattern>]] [-n]` */
   listTags(options?: GitTagListOptions): Promise<GitTagResult>;
   /** `git tag <name> [<commit>]`, `git tag -a <name> -m <message> [<commit>]` */
   createTag(name: string, options?: GitTagCreateOptions): Promise<GitTagResult>;
   /** `git tag -d <name>` */
   deleteTag(name: string): Promise<GitTagResult>;
+  /** `git config [--global | --local] [--get | --unset | --list] [<name> [<value>]]` */
+  config(options: GitConfigOptions): Promise<GitConfigResult>;
   /** `git remote [-v]` */
   listRemotes(options?: { verbose?: boolean }): Promise<GitRemoteResult>;
+  /** `git remote add | remove | rename | set-url | get-url` */
+  remote(command: GitRemoteCommand): Promise<GitRemoteResult>;
+  /** `git clone <url> [.]`: a simulated server, cloned into this empty workspace. */
+  clone(url: string, directory?: string): Promise<GitCloneResult>;
   /** `git fetch [<remote>]`: updates remote-tracking branches from the simulated remote. */
   fetch(remote?: string): Promise<GitFetchResult>;
   /** `git push [-u] [<remote> [<branch>]]` to the simulated remote. */
@@ -618,6 +715,11 @@ export interface GitEngine {
    * the given local branches, as if the repository had been cloned from it.
    */
   setupRemote(name: string, options: GitSetupRemoteOptions): Promise<GitCommandResult>;
+  /**
+   * Lesson setup only: the history built so far becomes the simulated server `name`
+   * (`gitdojo://simulated/<name>.git`) and the workspace is emptied, ready for `git clone`.
+   */
+  setupCloneSource(name: string): Promise<GitCommandResult>;
   /** Lesson setup only: a commit that exists on the simulated remote but not locally yet. */
   setupRemoteCommit(name: string, input: GitSetupRemoteCommitInput): Promise<GitCommandResult>;
   /** `git rm [--cached] [-r] [-f] <path>...` */

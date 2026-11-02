@@ -20,18 +20,41 @@ export interface AuthorRecord {
 }
 
 /** What an interactive rebase does with one commit. Drops are simply left out of the todo. */
-export type RebaseAction = "pick" | "reword" | "squash" | "fixup";
+export type RebaseAction = "pick" | "reword" | "squash" | "fixup" | "edit";
 
-export interface RebaseStep {
-  action: RebaseAction;
-  oid: string;
-}
+/**
+ * One line of an interactive rebase's plan:
+ *
+ * - a commit to replay, with what to do with it (`fixup -C` / `-c` keep this commit's message);
+ * - `break`: stop, for `git rebase --continue` to resume;
+ * - `label` / `reset`: name where HEAD is, or go back to a named point (or any commit);
+ * - `merge`: recreate a merge of HEAD with a named point, optionally reusing a merge's message.
+ */
+export type RebaseStep =
+  | { action: RebaseAction; oid: string; message?: "use" | "edit" }
+  | { action: "break" }
+  | { action: "label"; name: string }
+  | { action: "reset"; name: string }
+  | {
+      action: "merge";
+      name: string;
+      /** `-C <commit>` / `-c <commit>`: recreate that merge, with its message and author. */
+      messageFrom?: string;
+      /** `-c`: then open the editor on the message. */
+      editMessage?: boolean;
+      /** The line's `# <oneline>`, used as the message when no `-C` commit is given. */
+      subject?: string;
+    };
+
+export type CommitStep = Extract<RebaseStep, { oid: string }>;
 
 /** A squash/fixup chain folded into one commit so far: each message, and whether it is kept. */
 export interface SquashChain {
   messages: { text: string; skip: boolean }[];
   /** Some step was a `squash`, so Git asks for the combined message at the end of the chain. */
   squash: boolean;
+  /** A `fixup -c` asked to edit the message it kept, at the end of the chain. */
+  edit?: boolean;
 }
 
 /** Where a `git rebase` is: the commits still to replay and how to go back. */
@@ -50,12 +73,27 @@ export interface RebaseRecord {
   interactive?: boolean;
   /** Interactive rebases: what to do with `current` once its conflicts are resolved. */
   currentAction?: RebaseAction;
+  /**
+   * The whole step that stopped for conflicts (newer records); `currentAction` is kept for
+   * records written before `fixup -C` and `merge` steps existed.
+   */
+  currentStep?: RebaseStep;
+  /** `edit` or `break` stopped the rebase here, with nothing to resolve; HEAD is free to move. */
+  stopped?: "edit" | "break";
+  /** `label` names, and `onto`, to the commits they were set at. */
+  labels?: Record<string, string>;
   /** Interactive rebases: the squash/fixup chain HEAD is part of, if any. */
   chain?: SquashChain;
 }
 
 export function rebaseStep(step: string | RebaseStep): RebaseStep {
   return typeof step === "string" ? { action: "pick", oid: step } : step;
+}
+
+/** The step that stopped for conflicts, whichever way the record stored it. */
+export function stoppedStep(rebase: RebaseRecord): RebaseStep | null {
+  if (rebase.current === null) return null;
+  return rebase.currentStep ?? { action: rebase.currentAction ?? "pick", oid: rebase.current };
 }
 
 /**

@@ -194,7 +194,7 @@ test.describe("navigation reflects the session", () => {
     await expect(stat(page, "xp")).toHaveText("25");
     await expect(page.getByTestId("session-expired")).toHaveCount(0);
     await page.goto("/learn/git-basics");
-    await expect(page.getByTestId("course-percent")).toHaveText("10%");
+    await expect(page.getByTestId("course-percent")).toHaveText("9%");
     if (!isMobile) {
       await expect(
         page.getByRole("banner").getByRole("link", { name: "Create account" }),

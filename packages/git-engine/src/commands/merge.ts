@@ -1,9 +1,9 @@
 import git from "isomorphic-git";
+import { learnerIdentity } from "../engine/config";
 import { type GitContext } from "../engine/context";
 import { formatDiffStat } from "../engine/diff";
 import { failure, gitError, notARepository, success } from "../engine/errors";
 import {
-  DEFAULT_AUTHOR,
   type ConflictKind,
   type GitAbortMergeResult,
   type GitMergeOptions,
@@ -207,7 +207,7 @@ export async function runMerge(
     fs: ctx.fs,
     dir: ctx.dir,
     message,
-    author: DEFAULT_AUTHOR,
+    author: await learnerIdentity(ctx),
     parent: ours === null ? [theirs] : [ours, theirs],
   });
   await logHeadMove(ctx, {

@@ -172,3 +172,129 @@ export function formatChangeSummary(changes: readonly FileChange[]): string[] {
     }),
   ];
 }
+
+/** One line of a combined diff: a marker per parent (` `, `+` or `-`), then the text. */
+export interface CombinedDiffLine {
+  markers: string;
+  text: string;
+}
+
+export interface CombinedDiffHunk {
+  /** Per parent: where the hunk starts in that parent, and how many of its lines it covers. */
+  parents: { start: number; lines: number }[];
+  result: { start: number; lines: number };
+  lines: CombinedDiffLine[];
+}
+
+interface CombinedEntry {
+  markers: string[];
+  text: string;
+  /** Whether this line exists in each parent, and in the result. */
+  inParent: boolean[];
+  inResult: boolean;
+}
+
+/**
+ * `git show` of a merge (Git's `--cc`): the result compared with every parent at once, keeping
+ * only hunks with a line that differs from all of them. A clean merge, where each change comes
+ * from one side, has none; a conflict resolution or a change made in the merge itself shows up.
+ */
+export function combinedDiffHunks(parents: readonly string[], result: string): CombinedDiffHunk[] {
+  const resultLines = splitLines(result);
+  const scripts = parents.map((parent) => editScript(parent, result));
+  // For each parent: which result lines are added, and the lines removed before each position.
+  const added = scripts.map(
+    (edits) => new Set(edits.filter((e) => e.type === "add").map((e) => e.newLine - 1)),
+  );
+  const removedAt = scripts.map((edits) => {
+    const at = new Map<number, string[]>();
+    for (const edit of edits.filter((e) => e.type === "remove")) {
+      const list = at.get(edit.newLine - 1) ?? [];
+      list.push(edit.text);
+      at.set(edit.newLine - 1, list);
+    }
+    return at;
+  });
+
+  const entries: CombinedEntry[] = [];
+  for (let position = 0; position <= resultLines.length; position += 1) {
+    // Removed lines first; the same text removed from several parents is one line, as in Git.
+    const pending = removedAt.map((at) => [...(at.get(position) ?? [])]);
+    for (const [index, list] of pending.entries()) {
+      for (const text of list) {
+        const inParent = parents.map((_, other) => {
+          if (other === index) return true;
+          const found = pending[other]?.indexOf(text) ?? -1;
+          if (other < index || found === -1) return false;
+          pending[other]?.splice(found, 1);
+          return true;
+        });
+        entries.push({
+          markers: inParent.map((has) => (has ? "-" : " ")),
+          text,
+          inParent,
+          inResult: false,
+        });
+      }
+    }
+    const text = resultLines[position];
+    if (text === undefined) continue;
+    const markers = parents.map((_, index) => (added[index]?.has(position) ? "+" : " "));
+    entries.push({ markers, text, inParent: markers.map((m) => m === " "), inResult: true });
+  }
+
+  // Interesting: changed with respect to every parent.
+  const interesting = entries.flatMap((entry, index) =>
+    entry.markers.every((marker) => marker !== " ") ? [index] : [],
+  );
+  const ranges: [number, number][] = [];
+  for (const index of interesting) {
+    const start = Math.max(0, index - CONTEXT);
+    const end = Math.min(entries.length - 1, index + CONTEXT);
+    const last = ranges.at(-1);
+    if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+    else ranges.push([start, end]);
+  }
+
+  return ranges.map(([start, end]) => {
+    const before = entries.slice(0, start);
+    const slice = entries.slice(start, end + 1);
+    const span = (count: number, previous: number) => ({
+      start: count === 0 ? previous : previous + 1,
+      lines: count,
+    });
+    return {
+      parents: parents.map((_, index) =>
+        span(
+          slice.filter((entry) => entry.inParent[index]).length,
+          before.filter((entry) => entry.inParent[index]).length,
+        ),
+      ),
+      result: span(
+        slice.filter((entry) => entry.inResult).length,
+        before.filter((entry) => entry.inResult).length,
+      ),
+      lines: slice.map((entry) => ({ markers: entry.markers.join(""), text: entry.text })),
+    };
+  });
+}
+
+/** Git's `diff --cc` block for one path of a merge. */
+export function formatCombinedDiff(
+  path: string,
+  hunks: readonly CombinedDiffHunk[],
+  oids: { parents: readonly (string | null)[]; result: string | null },
+): string {
+  const short = (oid: string | null) => (oid ?? "0000000").slice(0, 7);
+  const ats = "@".repeat(oids.parents.length + 1);
+  return [
+    `diff --cc ${path}`,
+    `index ${oids.parents.map(short).join(",")}..${short(oids.result)}`,
+    `--- a/${path}`,
+    oids.result === null ? "+++ /dev/null" : `+++ b/${path}`,
+    ...hunks.flatMap((hunk) => [
+      `${ats} ${hunk.parents.map((p) => `-${range(p.start, p.lines)}`).join(" ")} +${range(hunk.result.start, hunk.result.lines)} ${ats}`,
+      ...hunk.lines.map((line) => `${line.markers}${line.text.replace(/\n$/, "")}`),
+    ]),
+  ].join("\n");
+}

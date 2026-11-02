@@ -33,6 +33,15 @@ const GIT_BASICS: { slug: string; commands?: string[] }[] = [
     ],
   },
   {
+    slug: "git-config",
+    commands: [
+      'git config --global user.name "Ada Lovelace"',
+      'git config --global user.email "ada@example.com"',
+      "git add .",
+      'git commit -m "Add recipes"',
+    ],
+  },
+  {
     slug: "git-log",
     commands: ["git log", "git add CHANGELOG.md", 'git commit -m "Add changelog"'],
   },
@@ -117,9 +126,9 @@ test("completes the Git Basics course and the dashboard adds it up", async ({ pa
   await expect(page.getByTestId("course-percent")).toHaveText("100%");
 
   await openDashboard(page);
-  // 4 concept lessons × 25 + 5 interactive × 50 + 1 challenge lesson × 100.
-  await expect(stat(page, "xp")).toHaveText("450");
-  await expect(stat(page, "lessons")).toHaveText("10");
+  // 4 concept lessons × 25 + 6 interactive × 50 + 1 challenge lesson × 100.
+  await expect(stat(page, "xp")).toHaveText("500");
+  await expect(stat(page, "lessons")).toHaveText("11");
   // The course's challenge lesson is a lesson, not a standalone challenge.
   await expect(stat(page, "challenges")).toHaveText("0");
   await expect(stat(page, "commands")).toHaveText(String(commands));
@@ -134,7 +143,7 @@ test("completes the Git Basics course and the dashboard adds it up", async ({ pa
   await expect(page.locator('[data-course="branching"]')).toHaveAttribute("data-status", "current");
   // Every lesson was finished today.
   await expect(page.getByTestId("activity-summary")).toContainText(
-    "Active on 1 of the last 30 days · 10 completions",
+    "Active on 1 of the last 30 days · 11 completions",
   );
   await expect(page.getByTestId("continue-learning")).toHaveAttribute(
     "href",
@@ -271,7 +280,7 @@ test("migrates progress saved by earlier versions", async ({ page }) => {
   await page.reload();
   await expect(stat(page, "xp")).toHaveText("175");
   await page.goto("/learn/git-basics");
-  await expect(page.getByTestId("course-percent")).toHaveText("20%");
+  await expect(page.getByTestId("course-percent")).toHaveText("18%");
 });
 
 test("continue learning returns to the last visited lesson", async ({ page }) => {

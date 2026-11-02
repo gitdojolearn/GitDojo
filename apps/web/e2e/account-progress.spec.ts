@@ -96,7 +96,7 @@ test("a lesson completed while signed in is saved to the account and loads in a 
   await signIn(fresh.page, primary);
   await expect(stat(fresh.page, "xp")).toHaveText("25");
   await fresh.page.goto("/learn/git-basics");
-  await expect(fresh.page.getByTestId("course-percent")).toHaveText("10%");
+  await expect(fresh.page.getByTestId("course-percent")).toHaveText("9%");
   await fresh.context.close();
 });
 

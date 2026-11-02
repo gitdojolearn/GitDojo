@@ -1,16 +1,20 @@
 import git from "isomorphic-git";
+import { learnerIdentity } from "../engine/config";
 import { type GitContext } from "../engine/context";
 import {
   cleanMessage,
   clearEditorRecord,
+  editorOpenMessage,
+  isRebaseEditor,
   readEditorRecord,
+  refuseEditor,
   WAITING_FOR_EDITOR,
   writeEditorRecord,
-  type EditorRecord,
+  type RebaseEditorRecord,
 } from "../engine/editor-state";
 import { failure, gitError, notARepository, success } from "../engine/errors";
+import { type GitEngineError } from "@gitdojo/shared-types";
 import {
-  DEFAULT_AUTHOR,
   type GitCommitInfo,
   type GitRebaseOptions,
   type GitRebaseResult,
@@ -22,8 +26,10 @@ import {
   operationKind,
   readMergeState,
   rebaseStep,
+  stoppedStep,
   unresolvedConflicts,
   writeMergeState,
+  type CommitStep,
   type MergeStateRecord,
   type RebaseAction,
   type RebaseRecord,
@@ -42,7 +48,9 @@ import {
 } from "../engine/repository";
 import { resolveRevision } from "../engine/revisions";
 import { hasStagedChanges, readStatusEntries } from "../engine/status-matrix";
-import { applyWorkingTreeUpdates } from "../engine/working-tree";
+import { threeWay, threeWayOverwriteError } from "../engine/three-way";
+import { applyWorkingTreeUpdates, readTreeFiles } from "../engine/working-tree";
+import { isValidBranchName } from "./branch";
 import { commitPick, preparePick, type PreparedPick } from "./pick";
 import { forceCheckout } from "./reset";
 import { checkoutCommit } from "./switch";
@@ -126,7 +134,7 @@ async function amendHead(
     dir: ctx.dir,
     message,
     author: commit.author,
-    committer: DEFAULT_AUTHOR,
+    committer: await learnerIdentity(ctx),
     parent: commit.parent,
     ...(keepTree ? { tree: commit.tree } : {}),
   });
@@ -150,12 +158,11 @@ function ordinal(index: number): string {
 function squashTemplate(rebase: RebaseRecord): string {
   const messages = rebase.chain?.messages ?? [];
   const blocks = messages.map((message, index) => {
-    const label =
-      index === 0
+    const label = message.skip
+      ? `# The commit message #${String(index + 1)} will be skipped:`
+      : index === 0
         ? `# This is the ${ordinal(0)} commit message:`
-        : message.skip
-          ? `# The commit message #${String(index + 1)} will be skipped:`
-          : `# This is the commit message #${String(index + 1)}:`;
+        : `# This is the commit message #${String(index + 1)}:`;
     const body = message.skip
       ? message.text
           .split("\n")
@@ -203,34 +210,104 @@ async function waitForMessage(
 }
 
 /**
- * Records the step whose changes are in the index: a new commit for pick/reword, or folded into
- * HEAD's commit for squash/fixup. Returns a result when the rebase has to stop for the editor.
+ * `edit` and `break`: the rebase stops with nothing to resolve. HEAD is free to move (amend,
+ * reset, new commits) until `git rebase --continue` replays the rest on top of wherever it is.
+ */
+async function stopAt(
+  ctx: GitContext,
+  rebase: RebaseRecord,
+  reason: "edit" | "break",
+  report: string[],
+): Promise<GitRebaseResult> {
+  const head = (await resolveRefOrNull(ctx, "HEAD")) ?? rebase.onto;
+  const message = (await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: head })).commit.message;
+  const title = subject(message);
+  await writeMergeState(ctx, {
+    kind: "rebase",
+    branch: `${shortOid(head)} (${title})`,
+    theirs: head,
+    ours: head,
+    message: message.trimEnd(),
+    conflicts: [],
+    touched: [],
+    rebase: { ...rebase, current: null, stopped: reason },
+  });
+  const lines =
+    reason === "edit"
+      ? [
+          `Stopped at ${shortOid(head)}...  ${title}`,
+          "You can amend the commit now, with",
+          "",
+          "  git commit --amend",
+          "",
+          "Once you are satisfied with your changes, run",
+          "",
+          "  git rebase --continue",
+        ]
+      : [
+          `Stopped at ${shortOid(head)}...  ${title}`,
+          'hint: Run "git rebase --continue" to go on.',
+        ];
+  return success([...report, ...lines].join("\n"), { status: "stopped", oid: head });
+}
+
+/**
+ * A step that cannot run (a `reset` or `merge` that would overwrite untracked files): the rebase
+ * stops at a `break` so nothing is lost, and the learner can fix it and continue, or abort.
+ */
+async function stopWithError(
+  ctx: GitContext,
+  rebase: RebaseRecord,
+  error: GitEngineError,
+  report: string[],
+): Promise<GitRebaseResult> {
+  const stopped = await stopAt(ctx, rebase, "break", []);
+  const output = [...report, error.message, stopped.output].join("\n");
+  return { ok: false, output, data: { status: "stopped" }, error: { ...error, message: output } };
+}
+
+/**
+ * Records the step whose changes are in the index: a new commit for pick/reword/edit, or folded
+ * into HEAD's commit for squash/fixup. Returns a result when the rebase has to stop.
  */
 async function commitStep(
   ctx: GitContext,
   rebase: RebaseRecord,
-  action: RebaseAction,
+  step: CommitStep,
   pick: Pick<PreparedPick, "message" | "author">,
   report: string[],
 ): Promise<GitRebaseResult | null> {
+  const { action } = step;
   const title = subject(pick.message);
-  if (action === "pick" || action === "reword") {
+  if (action === "pick" || action === "reword" || action === "edit") {
     await commitPick(ctx, pick, `rebase (pick): ${title}`);
     delete rebase.chain;
-    return action === "reword" ? waitForMessage(ctx, rebase, "reword", report) : null;
+    if (action === "reword") return waitForMessage(ctx, rebase, "reword", report);
+    return action === "edit" ? stopAt(ctx, rebase, "edit", report) : null;
   }
   // squash / fixup: meld into the previous commit, keeping its message for now.
   const chain = (rebase.chain ??= {
     messages: [{ text: await headMessage(ctx), skip: false }],
     squash: false,
   });
-  chain.messages.push({ text: pick.message, skip: action === "fixup" });
+  if (action === "fixup" && step.message !== undefined) {
+    // `fixup -C` / `-c`: this commit's message replaces every message folded so far.
+    chain.messages = chain.messages.map((message) => ({ ...message, skip: true }));
+    chain.messages.push({ text: pick.message, skip: false });
+    if (step.message === "edit") chain.edit = true;
+  } else {
+    chain.messages.push({ text: pick.message, skip: action === "fixup" });
+  }
   if (action === "squash") chain.squash = true;
-  await amendHead(ctx, chain.messages[0]?.text ?? pick.message, `rebase (${action}): ${title}`);
+  const kept = chain.messages.find((message) => !message.skip)?.text ?? pick.message;
+  await amendHead(ctx, kept, `rebase (${action}): ${title}`);
   return endOfChain(ctx, rebase, report);
 }
 
-/** After a squash or fixup: if the chain ends here and had a squash, ask for the message. */
+/**
+ * After a squash or fixup: if the chain ends here, ask for the message when a `squash` (or a
+ * `fixup -c`) wants it edited.
+ */
 async function endOfChain(
   ctx: GitContext,
   rebase: RebaseRecord,
@@ -240,8 +317,9 @@ async function endOfChain(
   const continues = next !== undefined && ["squash", "fixup"].includes(rebaseStep(next).action);
   if (continues || !rebase.chain) return null;
   if (rebase.chain.squash) return waitForMessage(ctx, rebase, "squash", report);
+  const edit = rebase.chain.edit === true;
   delete rebase.chain;
-  return null;
+  return edit ? waitForMessage(ctx, rebase, "reword", report) : null;
 }
 
 async function parentOf(ctx: GitContext, oid: string): Promise<string | null> {
@@ -249,18 +327,186 @@ async function parentOf(ctx: GitContext, oid: string): Promise<string | null> {
   return commit.parent.length === 1 ? (commit.parent[0] ?? null) : null;
 }
 
+/** A label set earlier in the plan, `onto`, or any revision, as Git resolves `reset` targets. */
+async function resolveLabel(
+  ctx: GitContext,
+  rebase: RebaseRecord,
+  name: string,
+): Promise<string | null> {
+  return (
+    rebase.labels?.[name] ?? (name === "onto" ? rebase.onto : await resolveRevision(ctx, name))
+  );
+}
+
+/** `reset <label>`: HEAD (and the working tree) go back to that point; nothing is committed. */
+async function resetStep(
+  ctx: GitContext,
+  rebase: RebaseRecord,
+  name: string,
+  report: string[],
+): Promise<GitRebaseResult | null> {
+  const target = await resolveLabel(ctx, rebase, name);
+  const head = await resolveRefOrNull(ctx, "HEAD");
+  if (target === null) {
+    return stopWithError(
+      ctx,
+      rebase,
+      gitError("INVALID_TODO", `error: could not resolve '${name}'`),
+      report,
+    );
+  }
+  const moved = await checkoutCommit(ctx, head, target);
+  if (!moved.ok) return stopWithError(ctx, rebase, moved.error, report);
+  await detachAt(ctx, target);
+  await logHeadMove(ctx, { from: head, to: target, message: `rebase (reset): '${name}'` });
+  delete rebase.chain;
+  return null;
+}
+
+/** Records a merge of HEAD with `theirs`, as a `merge` step's commit. */
+async function commitMerge(
+  ctx: GitContext,
+  rebase: RebaseRecord,
+  step: Extract<RebaseStep, { action: "merge" }>,
+  theirs: string,
+  message: string,
+  report: string[],
+): Promise<GitRebaseResult | null> {
+  const head = await resolveRefOrNull(ctx, "HEAD");
+  if (head === null) throw new Error("rebase lost HEAD");
+  const learner = await learnerIdentity(ctx);
+  // `merge -C <commit>` recreates that merge, so it keeps its author, as a pick does.
+  const author = step.messageFrom
+    ? (await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: step.messageFrom })).commit.author
+    : learner;
+  const oid = await git.commit({
+    fs: ctx.fs,
+    dir: ctx.dir,
+    message,
+    author,
+    committer: learner,
+    parent: [head, theirs],
+  });
+  await logHeadMove(ctx, { from: head, to: oid, message: `rebase (merge): ${subject(message)}` });
+  delete rebase.chain;
+  return step.editMessage ? waitForMessage(ctx, rebase, "reword", report) : null;
+}
+
+/** The message a `merge` step records: the `-C` commit's, the line's `# oneline`, or Git's. */
+async function mergeStepMessage(
+  ctx: GitContext,
+  step: Extract<RebaseStep, { action: "merge" }>,
+): Promise<string> {
+  if (step.messageFrom) {
+    const { commit } = await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: step.messageFrom });
+    return commit.message.trimEnd();
+  }
+  return step.subject ?? `Merge branch '${step.name}'`;
+}
+
 /**
- * Replays `rebase.todo` one step at a time on top of HEAD. Stops at the first conflict or editor,
- * saving where it is so the rebase can pick up from there; finishes the rebase otherwise.
+ * `merge [-C <commit> | -c <commit>] <label> [# <oneline>]`: three-way merges the labelled point
+ * into HEAD and records a merge commit, stopping for conflicts like any other step.
+ */
+async function mergeStep(
+  ctx: GitContext,
+  rebase: RebaseRecord,
+  step: Extract<RebaseStep, { action: "merge" }>,
+  report: string[],
+): Promise<GitRebaseResult | null> {
+  const theirs = await resolveLabel(ctx, rebase, step.name);
+  const ours = await resolveRefOrNull(ctx, "HEAD");
+  if (theirs === null || ours === null) {
+    return stopWithError(
+      ctx,
+      rebase,
+      gitError("INVALID_TODO", `error: could not resolve '${step.name}'`),
+      report,
+    );
+  }
+  // Already part of HEAD's history: there is nothing to merge.
+  if (await isAncestor(ctx, theirs, ours)) return null;
+
+  const message = await mergeStepMessage(ctx, step);
+  const bases = (await git.findMergeBase({
+    fs: ctx.fs,
+    dir: ctx.dir,
+    oids: [ours, theirs],
+  })) as string[];
+  const [baseTree, oursTree, theirsTree] = await Promise.all([
+    readTreeFiles(ctx, bases[0] ?? null),
+    readTreeFiles(ctx, ours),
+    readTreeFiles(ctx, theirs),
+  ]);
+  const merged = await threeWay(ctx, {
+    base: baseTree,
+    ours: oursTree,
+    theirs: theirsTree,
+    labels: { ours: "HEAD", theirs: step.name },
+  });
+  const status = new Map((await readStatusEntries(ctx)).map((entry) => [entry.path, entry]));
+  const problem = threeWayOverwriteError("merge", merged, status);
+  if (problem) return stopWithError(ctx, rebase, problem, report);
+  await applyWorkingTreeUpdates(ctx, merged.updates);
+
+  if (merged.conflicts.length > 0) {
+    await writeMergeState(ctx, {
+      kind: "rebase",
+      branch: step.name,
+      theirs,
+      ours,
+      message,
+      conflicts: merged.conflicts,
+      touched: merged.updates.map((update) => update.path),
+      rebase: { ...rebase, current: theirs, currentStep: step },
+    });
+    const output = [
+      ...report,
+      ...merged.report,
+      `error: could not merge '${step.name}'`,
+      "hint: Resolve all conflicts manually, mark them as resolved with",
+      'hint: "git add/rm <conflicted_files>", then run "git rebase --continue".',
+      'hint: To abort and get back to the state before "git rebase", run "git rebase --abort".',
+    ].join("\n");
+    return {
+      ok: false,
+      output,
+      data: { status: "conflict", conflicts: merged.conflicts.map((c) => c.path) },
+      error: gitError("MERGE_CONFLICT", output),
+    };
+  }
+  return commitMerge(ctx, rebase, step, theirs, message, report);
+}
+
+/**
+ * Replays `rebase.todo` one step at a time on top of HEAD. Stops at the first conflict, editor,
+ * `edit` or `break`, saving where it is so the rebase can pick up from there; finishes the
+ * rebase otherwise.
  */
 async function replay(ctx: GitContext, rebase: RebaseRecord): Promise<GitRebaseResult> {
   const report: string[] = [];
   for (let next = rebase.todo.shift(); next !== undefined; next = rebase.todo.shift()) {
-    const { action, oid } = rebaseStep(next);
+    const step = rebaseStep(next);
     const head = await resolveRefOrNull(ctx, "HEAD");
 
+    if (step.action === "break") return stopAt(ctx, rebase, "break", report);
+    if (step.action === "label") {
+      if (head !== null) rebase.labels = { ...rebase.labels, [step.name]: head };
+      continue;
+    }
+    if (step.action === "reset" || step.action === "merge") {
+      const stopped =
+        step.action === "reset"
+          ? await resetStep(ctx, rebase, step.name, report)
+          : await mergeStep(ctx, rebase, step, report);
+      if (stopped) return stopped;
+      continue;
+    }
+
+    const { action, oid } = step;
+    const replaysAsIs = action === "pick" || action === "reword" || action === "edit";
     // An interactive rebase keeps commits it does not need to change, as Git does.
-    if (rebase.interactive && (action === "pick" || action === "reword") && head !== null) {
+    if (rebase.interactive && replaysAsIs && head !== null) {
       if ((await parentOf(ctx, oid)) === head) {
         const moved = await checkoutCommit(ctx, head, oid);
         if (!moved.ok) return failure(moved.error);
@@ -272,6 +518,7 @@ async function replay(ctx: GitContext, rebase: RebaseRecord): Promise<GitRebaseR
         });
         delete rebase.chain;
         if (action === "reword") return waitForMessage(ctx, rebase, "reword", report);
+        if (action === "edit") return stopAt(ctx, rebase, "edit", report);
         continue;
       }
     }
@@ -281,7 +528,7 @@ async function replay(ctx: GitContext, rebase: RebaseRecord): Promise<GitRebaseR
     const { pick } = prepared;
     // A commit whose changes `onto` already has adds nothing: Git drops it. A squash or fixup
     // still folds its message into the chain.
-    if (pick.merged.updates.length === 0 && (action === "pick" || action === "reword")) continue;
+    if (pick.merged.updates.length === 0 && replaysAsIs) continue;
     await applyWorkingTreeUpdates(ctx, pick.merged.updates);
     if (pick.merged.conflicts.length > 0) {
       const state: MergeStateRecord = {
@@ -296,7 +543,7 @@ async function replay(ctx: GitContext, rebase: RebaseRecord): Promise<GitRebaseR
         rebase: {
           ...rebase,
           current: oid,
-          ...(rebase.interactive ? { currentAction: action } : {}),
+          ...(rebase.interactive ? { currentAction: action, currentStep: step } : {}),
         },
       };
       await writeMergeState(ctx, state);
@@ -318,7 +565,7 @@ async function replay(ctx: GitContext, rebase: RebaseRecord): Promise<GitRebaseR
         error: gitError("MERGE_CONFLICT", output),
       };
     }
-    const stopped = await commitStep(ctx, rebase, action, pick, report);
+    const stopped = await commitStep(ctx, rebase, step, pick, report);
     if (stopped) return stopped;
   }
   return finish(ctx, rebase);
@@ -352,10 +599,20 @@ async function todoTemplate(
     "# Commands:",
     "# p, pick <commit> = use commit",
     "# r, reword <commit> = use commit, but edit the commit message",
+    "# e, edit <commit> = use commit, but stop for amending",
     "# s, squash <commit> = use commit, but meld into previous commit",
-    '# f, fixup <commit> = like "squash", but keep only the previous',
-    "#                    commit's log message",
+    '# f, fixup [-C | -c] <commit> = like "squash" but keep only the previous',
+    "#                    commit's log message, unless -C is used, in which case",
+    "#                    keep only this commit's message; -c is same as -C but",
+    "#                    opens the editor",
+    "# b, break = stop here (continue rebase later with 'git rebase --continue')",
     "# d, drop <commit> = remove commit",
+    "# l, label <label> = label current HEAD with a name",
+    "# t, reset <label> = reset HEAD to a label",
+    "# m, merge [-C <commit> | -c <commit>] <label> [# <oneline>]",
+    "#         create a merge commit using the original merge commit's",
+    "#         message (or the oneline, if no original merge commit was",
+    "#         specified); use -c <commit> to reword the commit message",
     "#",
     "# These lines can be re-ordered; they are executed from top to bottom.",
     "#",
@@ -363,31 +620,26 @@ async function todoTemplate(
     "#",
     "# However, if you remove everything, the rebase will be aborted.",
     "#",
-    "# GitDojo supports pick, reword, squash, fixup and drop.",
+    "# GitDojo has no shell, so 'exec' is not available.",
     "",
   ].join("\n");
 }
 
-const TODO_ACTIONS: Record<string, RebaseAction | "drop" | "noop"> = {
+type TodoWord = RebaseAction | "drop" | "noop" | "break" | "label" | "reset" | "merge";
+
+const TODO_ACTIONS: Record<string, TodoWord> = {
   p: "pick",
   pick: "pick",
   r: "reword",
   reword: "reword",
+  e: "edit",
+  edit: "edit",
   s: "squash",
   squash: "squash",
   f: "fixup",
   fixup: "fixup",
   d: "drop",
   drop: "drop",
-  noop: "noop",
-};
-
-/** Real todo commands GitDojo cannot run: they get a clear "not supported" instead. */
-const UNSUPPORTED_ACTIONS: Record<string, string> = {
-  e: "edit",
-  edit: "edit",
-  x: "exec",
-  exec: "exec",
   b: "break",
   break: "break",
   l: "label",
@@ -396,57 +648,119 @@ const UNSUPPORTED_ACTIONS: Record<string, string> = {
   reset: "reset",
   m: "merge",
   merge: "merge",
-  u: "update-ref",
-  "update-ref": "update-ref",
+  noop: "noop",
 };
 
+type ParsedTodo = { ok: true; steps: RebaseStep[] } | { ok: false; message: string };
+
 /** Parses an edited todo list into steps (drops removed), or says what is wrong with it. */
-async function parseTodo(
-  ctx: GitContext,
-  content: string,
-): Promise<{ ok: true; steps: RebaseStep[] } | { ok: false; message: string }> {
+async function parseTodo(ctx: GitContext, content: string): Promise<ParsedTodo> {
   const steps: RebaseStep[] = [];
+  // `onto` always names where the rebase started, as in Git.
+  const labels = new Set(["onto"]);
   const lines = content.split("\n");
   for (const [index, raw] of lines.entries()) {
     const line = raw.trim();
     if (line === "" || line.startsWith("#")) continue;
-    const [word = "", target] = line.split(/\s+/);
-    const unsupported = UNSUPPORTED_ACTIONS[word];
-    if (unsupported !== undefined) {
-      return {
-        ok: false,
-        message: `error: GitDojo does not support '${unsupported}' in an interactive rebase yet (line ${String(index + 1)}).\nhint: Use pick, reword, squash, fixup or drop.`,
-      };
+    const at = `(line ${String(index + 1)})`;
+    const refuse = (message: string): ParsedTodo => ({ ok: false, message });
+    // `merge ... # <oneline>`: everything after `#` is the merge's subject, not more words.
+    const hash = line.indexOf(" #");
+    const words = (hash === -1 ? line : line.slice(0, hash)).split(/\s+/);
+    const comment = hash === -1 ? undefined : line.slice(hash + 2).trim();
+    const [word = ""] = words;
+
+    if (word === "x" || word === "exec") {
+      return refuse(
+        `error: GitDojo has no shell, so it cannot run '${line.slice(word.length).trim()}' ${at}.\nhint: Put a 'break' there instead and run what you need in the terminal, then "git rebase --continue".`,
+      );
+    }
+    if (word === "u" || word === "update-ref") {
+      return refuse(`error: GitDojo does not support 'update-ref' in an interactive rebase ${at}.`);
     }
     const action = TODO_ACTIONS[word];
-    if (action === undefined) {
-      return { ok: false, message: `error: invalid line ${String(index + 1)}: ${line}` };
-    }
+    if (action === undefined) return refuse(`error: invalid line ${String(index + 1)}: ${line}`);
     if (action === "noop") continue;
-    if (target === undefined) {
-      return {
-        ok: false,
-        message: `error: missing arguments for ${action} (line ${String(index + 1)})`,
-      };
+    if (action === "break") {
+      steps.push({ action });
+      continue;
     }
+
+    if (action === "label" || action === "reset") {
+      const [, name] = words;
+      if (name === undefined) return refuse(`error: missing arguments for ${action} ${at}`);
+      if (action === "label") {
+        if (!isValidBranchName(name))
+          return refuse(`error: '${name}' is not a valid label name ${at}`);
+        labels.add(name);
+      } else if (!labels.has(name) && (await resolveRevision(ctx, name)) === null) {
+        return refuse(`error: could not resolve '${name}' ${at}`);
+      }
+      steps.push(action === "label" ? { action, name } : { action, name });
+      continue;
+    }
+
+    // `fixup -C <commit>` / `merge -c <commit> <label>`: the option comes before the operands.
+    const option = words[1] === "-C" || words[1] === "-c" ? words[1] : undefined;
+    const operands = words.slice(option === undefined ? 1 : 2);
+    if (option !== undefined && action !== "fixup" && action !== "merge") {
+      return refuse(`error: '${word}' does not take ${option} ${at}`);
+    }
+    const resolve = async (target: string) => resolveRevision(ctx, target);
+
+    if (action === "merge") {
+      let messageFrom: string | undefined;
+      if (option !== undefined) {
+        const [commit] = operands;
+        messageFrom = commit === undefined ? undefined : ((await resolve(commit)) ?? undefined);
+        if (messageFrom === undefined) {
+          return refuse(`error: could not parse '${commit ?? ""}' after ${option} ${at}`);
+        }
+        operands.shift();
+      }
+      const [name] = operands;
+      if (name === undefined) return refuse(`error: missing arguments for merge ${at}`);
+      if (operands.length > 1) {
+        return refuse(
+          `error: GitDojo merges one label at a time (octopus merges are not supported) ${at}`,
+        );
+      }
+      if (!labels.has(name) && (await resolve(name)) === null) {
+        return refuse(`error: could not resolve '${name}' ${at}`);
+      }
+      steps.push({
+        action,
+        name,
+        ...(messageFrom === undefined ? {} : { messageFrom }),
+        ...(option === "-c" ? { editMessage: true } : {}),
+        ...(messageFrom === undefined && comment ? { subject: comment } : {}),
+      });
+      continue;
+    }
+
+    const [target] = operands;
+    if (target === undefined) return refuse(`error: missing arguments for ${action} ${at}`);
     if (target.startsWith("-")) {
-      return {
-        ok: false,
-        message: `error: GitDojo does not support '${word} ${target}' yet (line ${String(index + 1)}).`,
-      };
+      return refuse(`error: GitDojo does not support '${word} ${target}' yet ${at}.`);
     }
-    const oid = await resolveRevision(ctx, target);
+    const oid = await resolve(target);
     if (oid === null) {
-      return {
-        ok: false,
-        message: `error: invalid line ${String(index + 1)}: ${line}\nerror: could not parse '${target}'`,
-      };
+      return refuse(
+        `error: invalid line ${String(index + 1)}: ${line}\nerror: could not parse '${target}'`,
+      );
     }
     if (action === "drop") continue;
-    if ((action === "squash" || action === "fixup") && steps.length === 0) {
-      return { ok: false, message: `error: cannot '${action}' without a previous commit` };
+    if (
+      (action === "squash" || action === "fixup") &&
+      !steps.some((step) => "oid" in step || step.action === "merge")
+    ) {
+      return refuse(`error: cannot '${action}' without a previous commit`);
     }
-    steps.push({ action, oid });
+    steps.push({
+      action,
+      oid,
+      ...(option === undefined ? {} : { message: option === "-C" ? "use" : "edit" }),
+    });
   }
   return { ok: true, steps };
 }
@@ -565,33 +879,12 @@ export async function runRebase(
   return replay(ctx, rebase);
 }
 
-/** Keeps the editor open with the learner's text and says why it could not be closed. */
-async function refuseEditor(
+/** The learner saved and closed the todo list or message an interactive rebase opened. */
+export async function closeRebaseEditor(
   ctx: GitContext,
-  record: EditorRecord,
+  record: RebaseEditorRecord,
   content: string,
-  message: string,
 ): Promise<GitRebaseResult> {
-  const hint = 'hint: Fix it and save again, or run "git rebase --abort" to cancel.';
-  await writeEditorRecord(ctx, { ...record, content, error: message });
-  return {
-    ok: false,
-    output: `${message}\n${hint}`,
-    data: { status: "editing" },
-    error: gitError(
-      record.purpose === "todo" ? "INVALID_TODO" : "INVALID_ARGUMENT",
-      `${message}\n${hint}`,
-    ),
-  };
-}
-
-/** The learner saved and closed the file Git was waiting for. */
-export async function runCloseEditor(ctx: GitContext, content: string): Promise<GitRebaseResult> {
-  if (!(await isRepository(ctx))) return notARepository();
-  const record = await readEditorRecord(ctx);
-  if (record === null) {
-    return failure(gitError("NO_OPERATION", "error: Git is not waiting for an editor."));
-  }
   const rebase: RebaseRecord = { ...record.rebase, todo: [...record.rebase.todo] };
 
   if (record.purpose === "message") {
@@ -653,6 +946,9 @@ export async function runRebaseControl(
 ): Promise<GitRebaseResult> {
   if (!(await isRepository(ctx))) return notARepository();
   const editor = await readEditorRecord(ctx);
+  if (editor && !isRebaseEditor(editor)) {
+    return failure(gitError("EDITOR_OPEN", editorOpenMessage(editor)));
+  }
   if (editor) {
     if (action === "abort") {
       // Waiting for the todo list: nothing has happened yet, so there is nothing to undo.
@@ -682,9 +978,23 @@ export async function runRebaseControl(
     // Drop the stopped commit: back to HEAD, then on with the rest.
     await forceCheckout(ctx, await resolveRefOrNull(ctx, "HEAD"));
     await clearMergeState(ctx);
-    const next: RebaseRecord = { ...rebase, current: null };
-    delete next.currentAction;
-    return replay(ctx, next);
+    return replay(ctx, resumed(rebase));
+  }
+
+  // Stopped by `edit` or `break`: whatever the learner changed must be committed first.
+  if (rebase.stopped) {
+    const entries = await readStatusEntries(ctx);
+    if (hasStagedChanges(entries)) {
+      return failure(gitError("LOCAL_CHANGES", STAGED_WHILE_STOPPED));
+    }
+    if (entries.some((entry) => entry.unstaged === "modified" || entry.unstaged === "deleted")) {
+      return failure(
+        gitError(
+          "LOCAL_CHANGES",
+          "error: cannot rebase: You have unstaged changes.\nerror: Please commit or stash them.",
+        ),
+      );
+    }
   }
 
   if (unresolvedConflicts(state).length > 0) {
@@ -696,12 +1006,40 @@ export async function runRebaseControl(
     );
   }
   await clearMergeState(ctx);
-  const next: RebaseRecord = { ...rebase, current: null };
-  delete next.currentAction;
-  // The stopped commit, unless `git commit` already recorded it.
-  if (rebase.current !== null && hasStagedChanges(await readStatusEntries(ctx))) {
-    const stopped = await commitStep(ctx, next, rebase.currentAction ?? "pick", state, []);
+  const next = resumed(rebase);
+  // The stopped step, unless `git commit` already recorded it. A merge is recorded even when
+  // every conflict was resolved to HEAD's side: it still joins two histories.
+  const step = stoppedStep(rebase);
+  if (step?.action === "merge") {
+    const stopped = await commitMerge(ctx, next, step, state.theirs, state.message, []);
+    if (stopped) return stopped;
+  } else if (step && "oid" in step && hasStagedChanges(await readStatusEntries(ctx))) {
+    const stopped = await commitStep(ctx, next, step, state, []);
     if (stopped) return stopped;
   }
   return replay(ctx, next);
 }
+
+/** The rebase record once its stopped step is dealt with: nothing current, nothing stopped. */
+function resumed(rebase: RebaseRecord): RebaseRecord {
+  const next: RebaseRecord = { ...rebase, current: null };
+  delete next.currentAction;
+  delete next.currentStep;
+  delete next.stopped;
+  return next;
+}
+
+const STAGED_WHILE_STOPPED = [
+  "error: you have staged changes in your working tree",
+  "If these changes are meant to be squashed into the previous commit, run:",
+  "",
+  "  git commit --amend",
+  "",
+  "If they are meant to go into a new commit, run:",
+  "",
+  "  git commit -m <message>",
+  "",
+  "In both cases, once you're done, continue with:",
+  "",
+  "  git rebase --continue",
+].join("\n");

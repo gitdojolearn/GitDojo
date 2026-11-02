@@ -85,8 +85,9 @@ describe("courses", () => {
       [6, "staging-area", "concept"],
       [7, "git-add", "interactive"],
       [8, "git-commit", "interactive"],
-      [9, "git-log", "interactive"],
-      [10, "first-repository-challenge", "challenge"],
+      [9, "git-config", "interactive"],
+      [10, "git-log", "interactive"],
+      [11, "first-repository-challenge", "challenge"],
     ]);
   });
 
@@ -230,6 +231,21 @@ const SOLUTIONS: Record<string, PlayStep[]> = {
     'git commit -m "Add README"',
     "git add index.js",
     'git commit -m "Add app entry point"',
+  ],
+  "clone-a-repository": ["git clone gitdojo://simulated/origin.git .", "git switch feature/radar"],
+  "force-push-safely": [
+    "git add login.css",
+    "git commit --amend --no-edit",
+    "git push",
+    "git push --force-with-lease",
+  ],
+  "git-config": [
+    'git config --global user.name "Ada Lovelace"',
+    'git config --global user.email "ada@example.com"',
+    "git add README.md",
+    'git commit -m "Add README"',
+    "git add recipes/soup.md",
+    'git commit -m "Add soup recipe"',
   ],
   "git-log": ["git log", "git add CHANGELOG.md", 'git commit -m "Add changelog"'],
   "first-repository-challenge": ["git init", "git add .", 'git commit -m "Initial commit"'],
@@ -584,6 +600,19 @@ const STUCK: Record<string, { stuck: PlayStep[]; resolved: PlayStep[] | "reset" 
   "git-commit/rest-staged-not-committed": {
     stuck: ["git add README.md", 'git commit -m "Add README"', "git add index.js"],
     resolved: ['git commit -m "Add app entry point"'],
+  },
+  "clone-a-repository/initialized-not-cloned": { stuck: ["git init"], resolved: "reset" },
+  "force-push-safely/styles-in-own-commit": {
+    stuck: ["git add login.css", 'git commit -m "Add login styles"'],
+    resolved: ["git reset --soft HEAD~1", "git commit --amend --no-edit"],
+  },
+  "git-config/committed-as-default": {
+    stuck: ["git add .", 'git commit -m "Add recipes"'],
+    resolved: [
+      'git config user.name "Ada Lovelace"',
+      'git config user.email "ada@example.com"',
+      "git commit --amend --reset-author --no-edit",
+    ],
   },
   "git-log/changelog-staged-not-committed": {
     stuck: ["git add CHANGELOG.md"],

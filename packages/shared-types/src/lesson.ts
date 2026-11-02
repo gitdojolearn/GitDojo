@@ -55,6 +55,11 @@ export interface LessonSetup {
   /** A simulated remote, set up after the branches and before the uncommitted files. */
   remote?: LessonSetupRemote;
   /**
+   * The history above lives only on a simulated server, `gitdojo://simulated/<name>.git`
+   * (`name` defaults to `origin`), and the workspace starts empty, ready for `git clone`.
+   */
+  server?: { name?: string };
+  /**
    * Git commands run last (after the commits, branches and files), exactly as if typed in the
    * terminal, e.g. `git reset --hard HEAD~1` to leave a commit only the reflog remembers,
    * `git switch --detach HEAD~1`, or `git add notes.md` to stage a setup file. Each must succeed.

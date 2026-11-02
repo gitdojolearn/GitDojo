@@ -53,6 +53,7 @@ content:
         items:
           - A tag object with its own message, author and date
           - What releases use; `git tag -n` shows the message
+          - Without `-m`, Git opens an editor window for the message
 
   - type: example
     title: Tags in the history

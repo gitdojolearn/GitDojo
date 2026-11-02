@@ -96,7 +96,7 @@ test("sign up from a lesson, come back to it, stay signed in, then sign out", as
   await expect(page.getByTestId("session-expired")).toHaveCount(0);
   await expect(stat(page, "xp")).toHaveText("25");
   await page.goto("/learn/git-basics");
-  await expect(page.getByTestId("course-percent")).toHaveText("10%");
+  await expect(page.getByTestId("course-percent")).toHaveText("9%");
 });
 
 test("cancelling on the provider's page returns to sign-in with a clear message", async ({

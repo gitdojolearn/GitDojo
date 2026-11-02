@@ -119,9 +119,23 @@ function argumentCandidates(
   if (["show", "log", "reset", "revert", "cherry-pick"].includes(command)) {
     return ["HEAD", "HEAD~1", "HEAD~2", ...context.commits, ...context.tags];
   }
+  if (command === "config") {
+    // The setting name comes first; its value is the learner's own.
+    return args.some((arg) => !arg.startsWith("-"))
+      ? []
+      : ["user.name", "user.email", "init.defaultBranch"];
+  }
   if (command === "tag") return context.tags;
   if (command === "stash") return context.stashes;
-  if (command === "remote") return context.remotes;
+  if (command === "remote") {
+    const positional = args.filter((arg) => !arg.startsWith("-"));
+    return positional.length === 0
+      ? ["add", "remove", "rename", "set-url", "get-url"]
+      : ["remove", "rm", "rename", "set-url", "get-url"].includes(positional[0] ?? "") &&
+          positional.length === 1
+        ? context.remotes
+        : [];
+  }
   return [];
 }
 

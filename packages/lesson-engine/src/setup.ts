@@ -1,5 +1,10 @@
 import { runCommandLine } from "@gitdojo/command-parser";
-import { DEFAULT_BRANCH, type GitEngineFactory, type VirtualFileSystem } from "@gitdojo/git-engine";
+import {
+  DEFAULT_AUTHOR,
+  DEFAULT_BRANCH,
+  type GitEngineFactory,
+  type VirtualFileSystem,
+} from "@gitdojo/git-engine";
 import { type RepositoryStateReader } from "@gitdojo/repository-state";
 import {
   type GitCommandResult,
@@ -50,7 +55,8 @@ export async function applySetup(
   for (const directory of setup.directories ?? []) {
     await env.files.createDirectory(workspaceId, directory);
   }
-  if (setup.initializeGit) check(await git.init());
+  // Starting states are fixed: a learner's own `git config --global` never changes them.
+  if (setup.initializeGit) check(await git.init({ defaultBranch: DEFAULT_BRANCH }));
 
   // Commits run in order; each goes on its branch (default main). A new branch starts at main's
   // tip at that point, so the list reads like a story of how the history was built.
@@ -73,7 +79,7 @@ export async function applySetup(
     check(await git.add(Object.keys(commit.files)));
     // Back-date the history a minute per commit so it reads naturally in `git log`.
     const timestamp = now - (commits.length - index) * 60;
-    check(await git.commit({ message: commit.message, timestamp }));
+    check(await git.commit({ message: commit.message, timestamp, author: DEFAULT_AUTHOR }));
   }
   if (commits.length > 0) await moveTo(DEFAULT_BRANCH);
   for (const branch of setup.branches ?? []) check(await git.createBranch(branch));
@@ -95,6 +101,9 @@ export async function applySetup(
       );
     }
   }
+
+  // The history becomes a server to clone, and the workspace is left empty.
+  if (setup.server) check(await git.setupCloneSource(setup.server.name ?? "origin"));
 
   // Written after the history, so with setup commits these are the learner's uncommitted changes.
   for (const [path, content] of Object.entries(setup.files ?? {})) {

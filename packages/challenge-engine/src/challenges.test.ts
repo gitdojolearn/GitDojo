@@ -405,6 +405,18 @@ describe("challenge content", async () => {
       { editor: () => "Add search\n" },
     ]);
     expect(interactive.progress.completed).toBe(true);
+    // Stopping at the mixed commit with `edit`, then splitting it, works like resetting directly.
+    const edited = await play(byId("split-mixed-commit"), [
+      "git rebase -i main",
+      { editor: (todo) => todo.replace(/^pick /, "edit ") },
+      "git reset HEAD~1",
+      "git add src/analytics.js",
+      'git commit -m "Add analytics service"',
+      "git add docs/analytics.md",
+      'git commit -m "Document analytics service"',
+      "git rebase --continue",
+    ]);
+    expect(edited.progress.completed).toBe(true);
   });
 });
 

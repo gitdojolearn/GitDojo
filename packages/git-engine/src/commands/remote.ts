@@ -6,6 +6,7 @@ import { failure, gitError, notARepository, success } from "../engine/errors";
 import {
   type GitFetchData,
   type GitFetchResult,
+  type GitPullMode,
   type GitPullOptions,
   type GitPullResult,
   type GitPushOptions,
@@ -15,6 +16,7 @@ import {
   type GitSetupRemoteCommitInput,
   type GitSetupRemoteOptions,
 } from "../engine/git-engine";
+import { effectiveConfigValue } from "../engine/config";
 import { operationInProgressMessage, readMergeState } from "../engine/merge-state";
 import { readUpstreamConfig, writeUpstreamConfig } from "../engine/refs";
 import {
@@ -22,7 +24,9 @@ import {
   findRemote,
   readRemotes,
   simulatedRemoteUrl,
+  simulatedServerName,
   writeRemoteBranch,
+  writeRemoteTag,
 } from "../engine/remote-store";
 import {
   currentBranch,
@@ -37,7 +41,7 @@ import { allRefTips } from "./log";
 import { runMerge } from "./merge";
 import { runRebase } from "./rebase";
 
-const NO_NETWORK =
+export const NO_NETWORK =
   "hint: GitDojo has no network access: its remotes are simulated inside your workspace.";
 
 function remoteNotFound<T>(name: string): GitCommandResult<T> {
@@ -53,6 +57,13 @@ function remoteNotFound<T>(name: string): GitCommandResult<T> {
       ].join("\n"),
     ),
   );
+}
+
+/** For remotes added with a real-looking URL: say plainly that nothing left the browser. */
+function simulationNote(remote: GitRemoteInfo): string[] {
+  return simulatedServerName(remote.url) === null
+    ? [`hint: GitDojo has no network access: ${remote.url} is simulated in your browser.`]
+    : [];
 }
 
 /** `   1b7e55c..8d4c21e  main       -> origin/main`, Git's ref update line. */
@@ -89,13 +100,13 @@ async function defaultRemote(ctx: GitContext): Promise<string | null> {
  * Copies the simulated server's branches into `refs/remotes/<remote>/*`. Returns the report lines
  * (empty when nothing changed, as Git prints nothing then).
  */
-async function fetchRemote(
+export async function fetchRemote(
   ctx: GitContext,
   remote: GitRemoteInfo,
 ): Promise<{ lines: string[]; data: GitFetchData }> {
   const updated: GitFetchData["updated"] = [];
   const lines: string[] = [];
-  const width = Math.max(10, ...remote.branches.map((branch) => branch.name.length));
+  const width = Math.max(10, ...[...remote.branches, ...remote.tags].map((ref) => ref.name.length));
   for (const branch of remote.branches) {
     const ref = `refs/remotes/${remote.name}/${branch.name}`;
     const before = await resolveRefOrNull(ctx, ref);
@@ -115,10 +126,27 @@ async function fetchRemote(
     await git.writeRef({ fs: ctx.fs, dir: ctx.dir, ref, value: branch.oid, force: true });
     updated.push({ ref: tracking, from: before, to: branch.oid });
   }
+  // Tags the server has and this repository does not; an existing local tag is never replaced.
+  for (const tag of remote.tags) {
+    const ref = `refs/tags/${tag.name}`;
+    if ((await resolveRefOrNull(ctx, ref)) !== null) continue;
+    await git.writeRef({ fs: ctx.fs, dir: ctx.dir, ref, value: tag.oid });
+    lines.push(refLine("*", "[new tag]", tag.name, tag.name, width));
+  }
   return {
     lines: lines.length > 0 ? [`From ${remote.url}`, ...lines] : [],
     data: { updated },
   };
+}
+
+/** `pull.rebase=true|false` or `pull.ff=only`, when set; otherwise Git's default. */
+async function configuredPullMode(ctx: GitContext): Promise<GitPullMode | undefined> {
+  const rebase = (await effectiveConfigValue(ctx, "pull.rebase"))?.toLowerCase();
+  if (rebase === "true") return "rebase";
+  if (rebase === "false") return "merge";
+  return (await effectiveConfigValue(ctx, "pull.ff"))?.toLowerCase() === "only"
+    ? "ff-only"
+    : undefined;
 }
 
 /** `git fetch [<remote>]`. */
@@ -145,12 +173,142 @@ async function knownLocally(ctx: GitContext, oid: string): Promise<boolean> {
   return reachable.some((commit) => commit.oid === oid);
 }
 
-/** `git push [-u] [<remote> [<branch>]]`, with push.default=simple. */
+/** The remote a push names, or the reason it cannot go anywhere. */
+async function pushRemote(
+  ctx: GitContext,
+  name: string | undefined,
+): Promise<{ ok: true; remote: GitRemoteInfo } | { ok: false; result: GitPushResult }> {
+  const remoteName = name ?? (await defaultRemote(ctx));
+  if (remoteName === null) {
+    return {
+      ok: false,
+      result: failure(
+        gitError("REMOTE_NOT_FOUND", `fatal: No configured push destination.\n${NO_NETWORK}`),
+      ),
+    };
+  }
+  const remote = await findRemote(ctx, remoteName);
+  return remote === null ? { ok: false, result: remoteNotFound(remoteName) } : { ok: true, remote };
+}
+
+/** `git push <remote> --delete <branch>` (or `git push <remote> :<branch>`). */
+async function pushDelete(
+  ctx: GitContext,
+  remoteArg: string | undefined,
+  branch: string | undefined,
+): Promise<GitPushResult> {
+  if (branch === undefined || branch === "") {
+    return failure(
+      gitError("INVALID_ARGUMENT", "fatal: --delete doesn't make sense without any refs"),
+    );
+  }
+  const found = await pushRemote(ctx, remoteArg);
+  if (!found.ok) return found.result;
+  const { remote } = found;
+  if (!remote.branches.some((entry) => entry.name === branch)) {
+    const output = `error: unable to delete '${branch}': remote ref does not exist\nerror: failed to push some refs to '${remote.url}'`;
+    return failure(gitError("BRANCH_NOT_FOUND", output));
+  }
+  await writeRemoteBranch(ctx, remote.name, branch, null);
+  const tracking = `refs/remotes/${remote.name}/${branch}`;
+  if ((await resolveRefOrNull(ctx, tracking)) !== null) {
+    await git.deleteRef({ fs: ctx.fs, dir: ctx.dir, ref: tracking });
+  }
+  return success(`To ${remote.url}\n - ${"[deleted]".padEnd(17)} ${branch}`, {
+    status: "deleted",
+    remote: remote.name,
+    branch,
+  });
+}
+
+/** `git push --tags [<remote>]` and `git push <remote> <tag>`. */
+async function pushTags(
+  ctx: GitContext,
+  remoteArg: string | undefined,
+  only: string | undefined,
+  force: boolean,
+): Promise<GitPushResult> {
+  const found = await pushRemote(ctx, remoteArg);
+  if (!found.ok) return found.result;
+  const { remote } = found;
+  const names = (await git.listTags({ fs: ctx.fs, dir: ctx.dir })).filter(
+    (name) => only === undefined || name === only,
+  );
+  const width = Math.max(0, ...names.map((name) => name.length));
+  const lines: string[] = [];
+  const rejected: string[] = [];
+  const pushed: string[] = [];
+  for (const name of names) {
+    // The tag object itself for an annotated tag, so the server has the same tag.
+    const oid = await git.resolveRef({ fs: ctx.fs, dir: ctx.dir, ref: `refs/tags/${name}` });
+    const before = remote.tags.find((tag) => tag.name === name)?.oid ?? null;
+    if (before === oid) continue;
+    if (before !== null && !force) {
+      lines.push(refLine("!", "[rejected]", name, `${name} (already exists)`, width));
+      rejected.push(name);
+      continue;
+    }
+    await writeRemoteTag(ctx, remote.name, name, oid);
+    pushed.push(name);
+    lines.push(
+      before === null
+        ? refLine("*", "[new tag]", name, name, width)
+        : `${refLine("+", `${shortOid(before)}...${shortOid(oid)}`, name, name, width)} (forced update)`,
+    );
+  }
+  const data = { remote: remote.name, branch: [...pushed, ...rejected].join(" ") };
+  if (lines.length === 0)
+    return success("Everything up-to-date", { ...data, status: "up-to-date" });
+  if (rejected.length > 0) {
+    const output = [
+      `To ${remote.url}`,
+      ...lines,
+      `error: failed to push some refs to '${remote.url}'`,
+      "hint: Updates were rejected because the tag already exists in the remote.",
+    ].join("\n");
+    return {
+      ok: false,
+      output,
+      data: { ...data, status: "rejected" },
+      error: gitError("PUSH_REJECTED", output),
+    };
+  }
+  return success([`To ${remote.url}`, ...lines, ...simulationNote(remote)].join("\n"), {
+    ...data,
+    status: "pushed",
+  });
+}
+
+/**
+ * `git push [-u] [--force | --force-with-lease] [<remote> [<branch>]]`, with push.default=simple;
+ * also `--delete`, `--tags` and pushing one tag by name.
+ */
 export async function runPush(
   ctx: GitContext,
-  { remote: remoteArg, branch: branchArg, setUpstream = false }: GitPushOptions = {},
+  options: GitPushOptions = {},
 ): Promise<GitPushResult> {
   if (!(await isRepository(ctx))) return notARepository();
+  const { remote: remoteArg, setUpstream = false, force } = options;
+  const branchArg = options.branch?.startsWith(":") ? options.branch.slice(1) : options.branch;
+  if (options.delete === true || options.branch?.startsWith(":")) {
+    return pushDelete(ctx, remoteArg, branchArg);
+  }
+  if (options.tags === true) {
+    if (branchArg !== undefined) {
+      return failure(
+        gitError("INVALID_ARGUMENT", "fatal: GitDojo pushes either --tags or one branch"),
+      );
+    }
+    return pushTags(ctx, remoteArg, undefined, force !== undefined);
+  }
+  // `git push origin v1.0`: a tag (that is not also a branch) pushes just that tag.
+  if (
+    branchArg !== undefined &&
+    (await resolveRefOrNull(ctx, `refs/heads/${branchArg}`)) === null &&
+    (await resolveRefOrNull(ctx, `refs/tags/${branchArg}`)) !== null
+  ) {
+    return pushTags(ctx, remoteArg, branchArg, force !== undefined);
+  }
   const current = await currentBranch(ctx);
   const local = branchArg === undefined || branchArg === "HEAD" ? current : branchArg;
   if (local === null) {
@@ -161,7 +319,7 @@ export async function runPush(
       ),
     );
   }
-  if (branchArg !== undefined && branchArg.includes(":")) {
+  if (branchArg?.includes(":")) {
     return failure(
       gitError(
         "INVALID_ARGUMENT",
@@ -238,7 +396,25 @@ export async function runPush(
     });
   }
   const width = local.length;
-  if (before !== null && !(await isAncestor(ctx, before, oid))) {
+  const fastForward = before === null || (await isAncestor(ctx, before, oid));
+  // `--force-with-lease`: the remote must still be where this repository last saw it.
+  const expected = await resolveRefOrNull(ctx, `refs/remotes/${trackingName}`);
+  if (force === "lease" && before !== expected) {
+    const output = [
+      header,
+      refLine("!", "[rejected]", local, `${target} (stale info)`, width),
+      `error: failed to push some refs to '${remote.url}'`,
+      "hint: The remote branch has moved since you last fetched it, so pushing could",
+      "hint: throw away someone else's work. Fetch, look at what changed, then decide.",
+    ].join("\n");
+    return {
+      ok: false,
+      output,
+      data: { status: "rejected", remote: remote.name, branch: target, from: before },
+      error: gitError("PUSH_REJECTED", output),
+    };
+  }
+  if (!fastForward && force === undefined) {
     // The server has commits this branch does not: pushing would throw them away.
     const fetchFirst = !(await knownLocally(ctx, before));
     const output = [
@@ -278,13 +454,16 @@ export async function runPush(
   const line =
     before === null
       ? refLine("*", "[new branch]", local, target, width)
-      : refLine(" ", `${shortOid(before)}..${shortOid(oid)}`, local, target, width);
-  return success([header, line, ...tracked].join("\n"), {
+      : fastForward
+        ? refLine(" ", `${shortOid(before)}..${shortOid(oid)}`, local, target, width)
+        : `${refLine("+", `${shortOid(before)}...${shortOid(oid)}`, local, target, width)} (forced update)`;
+  return success([header, line, ...tracked, ...simulationNote(remote)].join("\n"), {
     status: "pushed",
     remote: remote.name,
     branch: target,
     from: before,
     to: oid,
+    ...(fastForward ? {} : { forced: true }),
   });
 }
 
@@ -311,9 +490,11 @@ function joinOutput(...parts: string[]): string {
 /** `git pull`: a fetch, then a fast-forward, merge or rebase onto what was fetched. */
 export async function runPull(
   ctx: GitContext,
-  { remote: remoteArg, branch: branchArg, mode }: GitPullOptions = {},
+  { remote: remoteArg, branch: branchArg, mode: modeArg }: GitPullOptions = {},
 ): Promise<GitPullResult> {
   if (!(await isRepository(ctx))) return notARepository();
+  // Without an option, `pull.rebase` and `pull.ff` choose, as the divergent-branches hint says.
+  const mode = modeArg ?? (await configuredPullMode(ctx));
   const inProgress = await readMergeState(ctx);
   if (inProgress) {
     return failure(gitError("OPERATION_IN_PROGRESS", operationInProgressMessage(inProgress)));

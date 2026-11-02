@@ -1,7 +1,9 @@
 import git from "isomorphic-git";
 import { type GitContext } from "../engine/context";
+import { WAITING_FOR_EDITOR, writeEditorRecord } from "../engine/editor-state";
 import { failure, gitError, notARepository, success } from "../engine/errors";
-import { DEFAULT_AUTHOR, type GitCommitInput, type GitCommitResult } from "../engine/git-engine";
+import { learnerIdentity } from "../engine/config";
+import { type GitCommitInput, type GitCommitResult } from "../engine/git-engine";
 import {
   clearMergeState,
   operationKind,
@@ -29,6 +31,33 @@ export const UNRESOLVED_CONFLICTS_MESSAGE = [
   "fatal: Exiting because of an unresolved conflict.",
 ].join("\n");
 
+/** What Git puts in COMMIT_EDITMSG when amending: the current message, then its help text. */
+async function openAmendEditor(
+  ctx: GitContext,
+  head: string,
+  resetAuthor: boolean,
+): Promise<GitCommitResult> {
+  const { commit } = await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: head });
+  const branch = await currentBranch(ctx);
+  const content = [
+    commit.message.trimEnd(),
+    "",
+    "# Please enter the commit message for your changes. Lines starting",
+    "# with '#' will be ignored, and an empty message aborts the commit.",
+    "#",
+    branch === null ? `# HEAD detached at ${shortOid(head)}` : `# On branch ${branch}`,
+    "",
+  ].join("\n");
+  await writeEditorRecord(ctx, {
+    kind: "commit",
+    purpose: "message",
+    file: "COMMIT_EDITMSG",
+    content,
+    ...(resetAuthor ? { resetAuthor } : {}),
+  });
+  return { ok: true, output: WAITING_FOR_EDITOR };
+}
+
 export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise<GitCommitResult> {
   if (!(await isRepository(ctx))) {
     return input.message.trim() === ""
@@ -42,7 +71,10 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
   }
   const operation = merge ? operationKind(merge) : null;
   const amendHead = input.amend ? await resolveRefOrNull(ctx, "HEAD") : null;
-  if (input.amend && (merge !== null || amendHead === null)) {
+  // A rebase stopped with nothing to resolve (`edit`, `break`, or a step already committed)
+  // leaves HEAD's commit free to amend, as in Git.
+  const rebaseIdle = operation === "rebase" && merge?.rebase?.current === null;
+  if (input.amend && ((merge !== null && !rebaseIdle) || amendHead === null)) {
     return failure(
       gitError(
         "INVALID_ARGUMENT",
@@ -51,6 +83,10 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
           : "fatal: there is no commit to amend",
       ),
     );
+  }
+  // `git commit --amend` without a message opens the editor on the commit's current one.
+  if (input.amend && amendHead !== null && !input.noEdit && input.message.trim() === "") {
+    return openAmendEditor(ctx, amendHead, input.resetAuthor === true);
   }
   // A rebase step that was already committed has nothing left for `git commit` to conclude.
   const concluding = merge !== null && !(operation === "rebase" && merge.rebase?.current === null);
@@ -92,9 +128,11 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
       ? (await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: amendHead })).commit
       : undefined;
   const original =
-    amended?.author ?? (concluding && input.message.trim() === "" ? merge.author : undefined);
+    (input.resetAuthor ? undefined : amended?.author) ??
+    (concluding && input.message.trim() === "" ? merge.author : undefined);
+  const learner = await learnerIdentity(ctx);
   const author = original ?? {
-    ...(input.author ?? DEFAULT_AUTHOR),
+    ...(input.author ?? learner),
     ...(input.timestamp === undefined ? {} : { timestamp: input.timestamp }),
   };
   const head = await resolveRefOrNull(ctx, "HEAD");
@@ -103,10 +141,11 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
     dir: ctx.dir,
     message,
     author,
-    ...(original ? { committer: DEFAULT_AUTHOR } : {}),
+    ...(original ? { committer: input.author ?? learner } : {}),
     ...(amended
       ? { parent: amended.parent }
-      : operation === "merge" && head !== null
+      : (operation === "merge" || (concluding && merge.rebase?.currentStep?.action === "merge")) &&
+          head !== null
         ? { parent: [head, merge?.theirs ?? head] }
         : {}),
   });

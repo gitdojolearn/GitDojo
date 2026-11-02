@@ -6,22 +6,28 @@ all satisfy "README.md is staged".
 
 ## Supported validators
 
-| Type                     | Fields                       | Passes when                                                                    |
-| ------------------------ | ---------------------------- | ------------------------------------------------------------------------------ |
-| `repository_initialized` | –                            | The workspace is a Git repository.                                             |
-| `file_exists`            | `file`                       | The file exists in the working tree (works before `git init` too).             |
-| `file_staged`            | `file`                       | The file has staged changes (added, modified or deleted in the index).         |
-| `file_committed`         | `file`                       | The file is in the last commit and unchanged since.                            |
-| `file_not_tracked`       | `file`                       | Git does not track the file: untracked, ignored or absent.                     |
-| `file_content`           | `file`, `content`            | The working-tree file has exactly the authored text.                           |
-| `commit_exists`          | `message?`                   | At least one commit exists; with `message`, a commit has exactly that message. |
-| `commit_count`           | `count`                      | HEAD's history has exactly `count` commits.                                    |
-| `commit_changes`         | `branch`, `message`, `files` | The named commit changes exactly those paths.                                  |
-| `clean_worktree`         | –                            | Initialized, nothing staged, and every file is committed and unmodified.       |
+| Type                     | Fields                       | Passes when                                                                       |
+| ------------------------ | ---------------------------- | --------------------------------------------------------------------------------- |
+| `repository_initialized` | –                            | The workspace is a Git repository.                                                |
+| `file_exists`            | `file`                       | The file exists in the working tree (works before `git init` too).                |
+| `file_staged`            | `file`                       | The file has staged changes (added, modified or deleted in the index).            |
+| `file_committed`         | `file`                       | The file is in the last commit and unchanged since.                               |
+| `file_not_tracked`       | `file`                       | Git does not track the file: untracked, ignored or absent.                        |
+| `file_content`           | `file`, `content`            | The working-tree file has exactly the authored text.                              |
+| `commit_exists`          | `message?`                   | At least one commit exists; with `message`, a commit has exactly that message.    |
+| `commit_author_set`      | `message?`                   | A commit in HEAD's history (with `message`) is not by GitDojo's default identity. |
+| `commit_count`           | `count`                      | HEAD's history has exactly `count` commits.                                       |
+| `commit_changes`         | `branch`, `message`, `files` | The named commit changes exactly those paths.                                     |
+| `clean_worktree`         | –                            | Initialized, nothing staged, and every file is committed and unmodified.          |
 
 | Type          | Fields           | Passes when                                                                        |
 | ------------- | ---------------- | ---------------------------------------------------------------------------------- |
 | `file_status` | `file`, `status` | The file's working-tree status is exactly `status` (`untracked`, `modified`, ...). |
+
+`commit_author_set` checks the identity recorded in the commit itself (both `user.name` and
+`user.email` must differ from `GitDojo Learner <learner@gitdojo.local>`), never the
+configuration, so the server can replay it from the same evidence as every other validator.
+Lesson setup commits always use the default identity, so they never satisfy it.
 
 `file_not_tracked` followed by `clean_worktree` requires that a file is **ignored** (listed in
 `.gitignore`) rather than committed or merely left untracked. `file_status` with

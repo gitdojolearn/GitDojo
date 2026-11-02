@@ -164,7 +164,18 @@ describe("explainCommand", () => {
     const typo = await run("git stauts");
     expect(typo?.code).toBe("UNKNOWN_GIT_COMMAND");
     expect(typo?.possibleCauses).toEqual(["Did you mean `status`?"]);
-    expect((await run("git clone x"))?.title).toBe("GitDojo does not support that command yet");
+    // A real command a later version will run gets a "not yet" (none is pending right now).
+    const planned = explainCommand({
+      command: "git frob",
+      ok: false,
+      output: "git: 'frob' is not available in GitDojo yet.",
+      errorCode: "UNSUPPORTED_GIT_COMMAND",
+    });
+    expect(planned?.title).toBe("GitDojo does not support that command yet");
+    // `git clone` runs now: in a folder with files, it says why it cannot clone there.
+    const clone = await run("git clone gitdojo://simulated/origin.git");
+    expect(clone?.code).toBe("CLONE_DESTINATION_NOT_EMPTY");
+    expect(clone?.possibleCauses).toEqual(["The folder already has files in it."]);
     expect((await run("git status --short"))?.code).toBe("UNSUPPORTED_OPTION");
     expect((await run("git commit -m"))?.code).toBe("MISSING_VALUE");
     expect((await run('git commit -m "oops'))?.code).toBe("UNCLOSED_QUOTE");

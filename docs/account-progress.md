@@ -20,7 +20,8 @@ GitDojo works exactly as before. Deployment (Vercel, Neon, releases): [deploymen
 
 **What doesn't**
 
-- Anonymous browser progress is never merged into, or uploaded to, an account.
+- Anonymous browser progress is never merged into, or uploaded to, an account on its own. After
+  signing in, the dashboard offers to add it ([Signed-out progress](#signed-out-progress)).
 - Lesson workspaces and playground repositories stay in the browser: they are not progress.
 
 ## What syncs
@@ -452,9 +453,9 @@ Manual, with a configured tenant and database:
 ## Known limitations
 
 - Concept lessons and evidence-free/offline completions are learner-reported (see above).
-- Anonymous browser progress is not merged automatically. Learners can export a JSON backup from
-  the dashboard and restore it while signed in; imported activity and completions are synced to
-  the account.
+- Anonymous browser progress is only offered, never merged automatically: the dashboard asks
+  after sign-in, and learners can also export a JSON backup and restore it while signed in.
+  Either way, imported completions count as learner-reported, not verified.
 - An account's browser cache stays in IndexedDB after signing out (it is never shown to anyone
   else); clearing site data removes it.
 - Lesson workspaces and playground repositories are not progress and stay in the browser.
@@ -470,6 +471,24 @@ Manual, with a configured tenant and database:
   clears that account's local progress cache. The identity-provider account itself is not deleted
   and must be managed with that provider. Signing in again later creates a new, empty GitDojo
   profile.
+
+## Signed-out progress
+
+When a signed-in account has loaded, `ProgressProvider` also reads this browser's anonymous
+record (`offerAnonymousProgress` in `use-progress-store.ts`). If it holds lesson, challenge or
+practice completions the account does not have, the dashboard shows **Add your signed-out
+progress to this account?** with the counts:
+
+- **Add to my account** runs exactly the backup-restore path (`restoreProgressBackup`): the
+  completions are checked against the catalog, uploaded without evidence (so they are
+  `reported`, never `verified`, and do not satisfy certificate evidence), XP is computed by the
+  server, and the anonymous record's activity syncs as its own device. The anonymous record
+  itself is left unchanged. If the activity upload fails, the offer stays so it can be retried.
+- **Not now** hides it. Either answer is remembered in `localStorage`
+  (`gitdojo:anonymous-transfer:<account id>`) for that exact set of completions; new signed-out
+  work later is a new offer.
+- Nothing is ever added without the click: on a shared computer, the signed-out progress may be
+  someone else's, which the offer says.
 
 ## Migrating an existing deployment
 

@@ -47,8 +47,8 @@ export const SKILLS: readonly SkillDefinition[] = [
     id: "commits",
     label: "Commits",
     phrase: "committing",
-    description: "Recording changes with clear messages.",
-    concepts: ["commits", "commit", "git-commit", "commit-messages"],
+    description: "Recording changes with clear messages, under your own name.",
+    concepts: ["commits", "commit", "git-commit", "commit-messages", "config"],
   },
   {
     id: "history",
@@ -140,8 +140,9 @@ export const SKILLS: readonly SkillDefinition[] = [
     id: "remotes",
     label: "Remotes",
     phrase: "remote",
-    description: "Fetching, pulling, pushing and tracking branches.",
+    description: "Cloning, fetching, pulling, pushing and tracking branches.",
     concepts: [
+      "clone",
       "remotes",
       "remote",
       "remote-tracking-branches",

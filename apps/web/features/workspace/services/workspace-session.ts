@@ -69,14 +69,17 @@ export abstract class WorkspaceSession<S> {
     });
   }
 
-  /** The learner closed Git's editor without saving: the rebase is aborted, as Git does. */
+  /**
+   * The learner closed Git's editor without saving: an interactive rebase is aborted, as Git
+   * does, and an amend or annotated tag is not made.
+   */
   abortEditor(): Promise<CommandOutcome<S>> {
     return this.enqueue(async () => {
-      const result = await runCommandLine("git rebase --abort", {
-        workspaceId: this.workspaceId,
-        git: this.env.gitFor(this.workspaceId),
-      });
+      const outcome = await this.env.gitFor(this.workspaceId).abortEditor();
       await this.persist();
+      const result: CommandExecutionResult = outcome.ok
+        ? { ok: true, output: outcome.output }
+        : { ok: false, output: outcome.output, errorCode: outcome.error?.code ?? "UNKNOWN" };
       return { result, snapshot: await this.evaluate(await this.readState()) };
     });
   }

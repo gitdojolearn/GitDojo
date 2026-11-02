@@ -1,0 +1,100 @@
+# Lesson: Tell Git Who You Are
+# Schema and authoring guide: docs/lesson-authoring.md
+id: git-config
+slug: git-config
+title: Tell Git Who You Are
+type: interactive
+
+goal: Set your name and email with git config, so your commits say who made them.
+
+description: |
+  Every commit records an **author**: a name and an email. Until you tell Git who you are,
+  GitDojo signs your commits as `GitDojo Learner`. On a real machine, Git refuses to commit at all.
+
+  Set your own name and email, then commit both files so the history shows you as the author.
+
+difficulty: beginner
+
+concepts:
+  - config
+  - commits
+
+commands:
+  - git config
+  - git commit
+  - git log
+
+content:
+  - type: example
+    title: Set your identity once
+    command: git config --global user.name "Ada Lovelace"
+    explanation: |
+      `--global` saves the setting in your own `~/.gitconfig`, so every repository on this
+      computer uses it. Set your email the same way:
+      `git config --global user.email "ada@example.com"`.
+
+  - type: example
+    title: Check what Git will use
+    command: git config user.name
+    output: |
+      Ada Lovelace
+    explanation: |
+      With just a name, `git config` prints its value. `git config --list` shows every setting.
+
+  - type: callout
+    tone: note
+    title: Global or just this repository
+    body: |
+      Without `--global`, the setting goes into this repository's `.git/config` and wins over the
+      global one here. That is handy for a work email in one project.
+
+  - type: callout
+    tone: tip
+    title: Another popular setting
+    body: |
+      `git config --global init.defaultBranch main` names the first branch of every new
+      repository `main`.
+
+setup:
+  initializeGit: true
+  files:
+    README.md: |
+      # Recipe Box
+
+      Family recipes, one file each.
+    recipes/soup.md: |
+      # Tomato Soup
+
+      Simmer tomatoes, onion and garlic for 20 minutes, then blend.
+
+objectives:
+  - id: commit-as-you
+    description: Set your `user.name` and `user.email`, then make a commit authored by you.
+    validator:
+      type: commit_author_set
+
+  - id: commit-everything
+    description: Commit every file, so the working tree is clean.
+    validator:
+      type: clean_worktree
+
+hints:
+  commit-as-you:
+    - Git takes a commit's author from two settings, `user.name` and `user.email`.
+    - Use `git config --global` with each setting's name and a value in quotes, then commit.
+    - Run `git config --global user.name "Your Name"` and `git config --global user.email "you@example.com"`, then `git add README.md` and `git commit -m "Add README"`.
+  commit-everything:
+    - Run `git status` to see what is not committed yet.
+    - Stage what is left and commit it with a message of your own.
+    - Run `git add .`, then `git commit -m "Add soup recipe"`.
+
+# Offered while the learner is in one of these states; see docs/lesson-authoring.md#adaptive-hints.
+adaptiveHints:
+  - id: committed-as-default
+    objective: commit-as-you
+    when:
+      - type: clean_worktree
+    hints:
+      - Everything is committed, but before your name was set, so the author is still `GitDojo Learner`. Run `git log` to see it.
+      - Set `user.name` and `user.email`, then amend the latest commit and ask Git to reset its author to you.
+      - After setting both, run `git commit --amend --reset-author --no-edit`.
