@@ -102,8 +102,9 @@ content:
     body: >-
       In GitDojo the todo list, and any message Git asks for, open in a GitDojo editor window.
       **Save and close** carries the rebase on; **Abort rebase** is the same as
-      `git rebase --abort`. GitDojo supports `pick`, `reword`, `squash`, `fixup` and `drop`;
-      `edit`, `exec` and `break` are not available yet.
+      `git rebase --abort`. GitDojo supports every todo command except `exec` (there is no shell):
+      `edit` and `break` stop the rebase so you can amend, split or add commits before
+      `git rebase --continue`.
 
 setup:
   initializeGit: true

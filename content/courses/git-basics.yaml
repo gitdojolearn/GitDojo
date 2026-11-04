@@ -20,5 +20,6 @@ lessons:
   - staging-area
   - git-add
   - git-commit
+  - git-config
   - git-log
   - first-repository-challenge

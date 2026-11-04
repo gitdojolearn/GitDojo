@@ -4,7 +4,7 @@ import { type GitShowResult } from "../engine/git-engine";
 import { failure, gitError, notARepository, success } from "../engine/errors";
 import { resolveRevision, unknownRevisionMessage } from "../engine/revisions";
 import { branchDecorations, formatCommit, runLog } from "./log";
-import { diffFile, formatFileDiff } from "../engine/diff";
+import { combinedDiffHunks, diffFile, formatCombinedDiff, formatFileDiff } from "../engine/diff";
 import { isRepository, resolveRefOrNull } from "../engine/repository";
 import { readBlobText, readTreeFiles } from "../engine/working-tree";
 
@@ -45,6 +45,16 @@ export async function runShow(ctx: GitContext, spec = "HEAD"): Promise<GitShowRe
     return success(await readBlobText(ctx, blob), { commit: commitInfo, files: [] });
   }
 
+  if (commit.parent.length > 1) {
+    const output = await combinedOutput(ctx, tree, commit.parent);
+    const labels = (await branchDecorations(ctx)).get(target);
+    const decoration = labels ? ` (${labels.join(", ")})` : "";
+    return success(
+      [formatCommit(commitInfo, decoration, false), output].filter(Boolean).join("\n\n"),
+      { commit: commitInfo, files: [] },
+    );
+  }
+
   const parent = await readTreeFiles(ctx, commit.parent[0] ?? null);
   // Read the blob text only for paths whose tree entries differ.
   const actualFiles = [];
@@ -75,4 +85,33 @@ export async function runShow(ctx: GitContext, spec = "HEAD"): Promise<GitShowRe
     .filter(Boolean)
     .join("\n\n");
   return success(output, { commit: commitInfo, files: actualFiles });
+}
+
+/** A merge's combined diff: only paths (and hunks) that differ from every parent. */
+async function combinedOutput(
+  ctx: GitContext,
+  tree: ReadonlyMap<string, string>,
+  parentOids: readonly string[],
+): Promise<string> {
+  const parents = await Promise.all(parentOids.map((oid) => readTreeFiles(ctx, oid)));
+  const paths = [...new Set([...tree.keys(), ...parents.flatMap((p) => [...p.keys()])])]
+    .filter((path) => parents.every((parent) => parent.get(path) !== tree.get(path)))
+    .sort();
+  const text = async (oid: string | undefined) => (oid === undefined ? "" : readBlobText(ctx, oid));
+  const blocks: string[] = [];
+  for (const path of paths) {
+    const result = tree.get(path);
+    const hunks = combinedDiffHunks(
+      await Promise.all(parents.map((parent) => text(parent.get(path)))),
+      await text(result),
+    );
+    if (hunks.length === 0) continue;
+    blocks.push(
+      formatCombinedDiff(path, hunks, {
+        parents: parents.map((parent) => parent.get(path) ?? null),
+        result: result ?? null,
+      }),
+    );
+  }
+  return blocks.join("\n");
 }

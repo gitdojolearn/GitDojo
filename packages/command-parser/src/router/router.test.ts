@@ -44,7 +44,7 @@ describe("command router", () => {
     );
   });
 
-  it("amends the current commit from the terminal without opening an editor", async () => {
+  it("amends the current commit from the terminal with -m or --no-edit", async () => {
     await runCommandLine("git init", context);
     await runCommandLine("git add README.md", context);
     await runCommandLine('git commit -m "Initial commit"', context);
@@ -60,6 +60,65 @@ describe("command router", () => {
       ok: true,
       gitCommand: "commit",
     });
+  });
+
+  it("opens the editor for git commit --amend without a message", async () => {
+    await runCommandLine("git init", context);
+    await runCommandLine("git add README.md", context);
+    await runCommandLine('git commit -m "Initial commit"', context);
+    expect(await runCommandLine("git commit --amend", context)).toMatchObject({
+      ok: true,
+      output: "hint: Waiting for your editor to close the file...",
+    });
+    expect((await context.git.snapshot()).editor?.content).toMatch(/^Initial commit\n/);
+    expect((await context.git.closeEditor("Add README\n")).ok).toBe(true);
+    expect((await runCommandLine("git log --oneline", context)).output).toMatch(/ Add README$/);
+  });
+
+  it("reads, sets, lists and unsets settings with git config", async () => {
+    expect(await runCommandLine("git config user.name", context)).toMatchObject({
+      ok: false,
+      output: "",
+      errorCode: "CONFIG_NOT_SET",
+      gitCommand: "config",
+    });
+    expect(
+      await runCommandLine('git config --global user.name "Ada Lovelace"', context),
+    ).toMatchObject({ ok: true, output: "" });
+    expect((await runCommandLine("git config user.name", context)).output).toBe("Ada Lovelace");
+    expect((await runCommandLine("git config --get user.name", context)).output).toBe(
+      "Ada Lovelace",
+    );
+    expect((await runCommandLine("git config -l", context)).output).toBe("user.name=Ada Lovelace");
+    expect(await runCommandLine("git config user.email ada@example.com", context)).toMatchObject({
+      ok: false,
+      output: "fatal: not in a git directory",
+    });
+
+    await runCommandLine("git init", context);
+    await runCommandLine("git add README.md", context);
+    await runCommandLine('git commit -m "Initial commit"', context);
+    expect(await runCommandLine('git commit --reset-author -m "Again"', context)).toMatchObject({
+      ok: false,
+      output: "fatal: --reset-author can be used only with --amend.",
+    });
+    expect((await runCommandLine("git config --global --unset user.name", context)).ok).toBe(true);
+    expect((await runCommandLine("git config user.name", context)).ok).toBe(false);
+  });
+
+  it("refuses contradictory git config options", async () => {
+    expect((await runCommandLine("git config --global --local user.name", context)).output).toBe(
+      "error: only one config file at a time",
+    );
+    expect((await runCommandLine("git config --list user.name", context)).output).toContain(
+      "error: wrong number of arguments",
+    );
+    expect((await runCommandLine("git config --get user.name Ada", context)).output).toContain(
+      "error: wrong number of arguments",
+    );
+    expect((await runCommandLine("git config --get --unset user.name", context)).output).toContain(
+      "error: only one action at a time",
+    );
   });
 
   it("moves a tracked file and stages both sides through git mv", async () => {
@@ -220,7 +279,8 @@ describe("command router", () => {
     expect(await command("ls")).toBeUndefined();
     expect(await command("git")).toBeUndefined();
     expect(await command("git push")).toBe("push");
-    expect(await command("git clone x")).toBeUndefined();
+    expect(await command("git clone x")).toBe("clone");
+    expect(await command("git frobnicate x")).toBeUndefined();
     expect(await command("git --help")).toBeUndefined();
     expect(await command("   ")).toBeUndefined();
   });
@@ -232,7 +292,10 @@ describe("command router", () => {
       clearScreen: true,
     });
     const help = await runCommandLine("help", context);
-    expect(help.output).toContain('git commit [-m "<message>"] [--amend [--no-edit]]');
+    expect(help.output).toContain(
+      'git commit [-m "<message>"] [--amend [--no-edit] [--reset-author]]',
+    );
+    expect(help.output).toContain("git config [--global]");
   });
 
   it("never rejects when the engine throws unexpectedly", async () => {
@@ -347,7 +410,9 @@ describe("command router", () => {
       expect((await run("git log --oneline")).output).toMatch(
         /\(HEAD -> main, tag: v1\.0, tag: v1\.1\)/,
       );
-      expect((await run("git tag -a v2")).errorCode).toBe("INVALID_ARGUMENT");
+      // Without -m, Git waits for the tag message in the editor.
+      expect((await run("git tag -a v2")).output).toContain("Waiting for your editor");
+      expect((await context.git.abortEditor()).output).toBe("fatal: no tag message?");
       expect((await run("git tag -d v1.0")).output).toMatch(/^Deleted tag 'v1\.0'/);
       expect((await run("git tag -d v1.0")).errorCode).toBe("TAG_NOT_FOUND");
       expect((await run("git tag -d a b")).errorCode).toBe("INVALID_ARGUMENT");
@@ -359,9 +424,17 @@ describe("command router", () => {
       expect((await run("git remote -v")).output).toContain(
         "gitdojo://simulated/origin.git (push)",
       );
-      expect((await run("git remote add upstream https://example.com/x.git")).output).toContain(
-        "no network",
+      expect(await run("git remote add upstream https://example.com/x.git")).toMatchObject({
+        ok: true,
+        output: "",
+      });
+      expect((await run("git remote get-url upstream")).output).toBe("https://example.com/x.git");
+      expect((await run("git remote rename upstream fork")).ok).toBe(true);
+      expect((await run("git remote remove fork")).ok).toBe(true);
+      expect((await run("git remote add only-a-name")).output).toBe(
+        "usage: git remote add <name> <url>",
       );
+      expect((await run("git remote frob")).output).toContain("error: unknown subcommand: `frob'");
       expect(await run("git fetch")).toMatchObject({ ok: true, output: "", gitCommand: "fetch" });
       expect((await run("git pull")).output).toBe("Already up to date.");
       expect((await run("git pull --rebase --ff-only")).errorCode).toBe("INVALID_ARGUMENT");
@@ -378,7 +451,16 @@ describe("command router", () => {
         /^\* feature [0-9a-f]{7} \[origin\/feature\] Initial commit/,
       );
       expect((await run("git branch -r new")).errorCode).toBe("INVALID_ARGUMENT");
-      expect((await run("git push --force")).errorCode).toBe("UNKNOWN_FLAG");
+      expect((await run("git push --force --force-with-lease")).output).toBe(
+        "fatal: choose one of --force and --force-with-lease",
+      );
+      expect((await run("git push origin --delete")).output).toBe(
+        "fatal: --delete doesn't make sense without any refs",
+      );
+      expect((await run("git push origin --delete nope")).output).toContain(
+        "unable to delete 'nope': remote ref does not exist",
+      );
+      expect((await run("git push --tags")).output).toBe("Everything up-to-date");
     });
 
     it("removes files with git rm", async () => {

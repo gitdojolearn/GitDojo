@@ -184,7 +184,22 @@ index or files: `git status` keeps saying "up to date" until the learner fetches
 lesson that the remote is simulated (a `note` callout works well); `git remote -v` shows its
 `gitdojo://simulated/...` URL. Check the result with the
 [remote validators](./validators.md#history-tag-and-remote-validators), and avoid teaching what
-the simulation cannot do: `git clone`, `git remote add`, force pushes and pushing tags.
+the simulation cannot do: `exec` in a rebase, `src:dst` refspecs, or cloning into a subfolder.
+
+To start from `git clone` instead, add `server:` (optionally with a `name`, default `origin`). The
+commits and branches above become the simulated server `gitdojo://simulated/<name>.git` and the
+workspace starts empty; `remote`, `files`, `directories` and `commands` cannot be combined with
+it. `branch_upstream` (`main` → `origin/main`) is the usual check that the learner cloned rather
+than ran `git init`.
+
+```yaml
+setup:
+  initializeGit: true
+  commits:
+    - message: Initial commit
+      files: { README.md: "# Weather\n" }
+  server: {} # cloned with: git clone gitdojo://simulated/origin.git .
+```
 
 ### Interactive rebase lessons
 
@@ -278,9 +293,9 @@ the same advice applies as for [challenge tips](./challenge-authoring.md#writing
   every hands-on lesson to have at least one rule, except those listed in `NO_STUCK_STATE` (such
   as `git-init`, whose only state before the goal is the starting one).
 - **Be honest about the way out.** Some states can only be undone with commands from later
-  lessons. The terminal supports `git commit --amend -m <message>` and
-  `git commit --amend --no-edit` for the latest local commit, but cannot force-push rewritten
-  history. For published work, teach a new commit or `git revert`.
+  lessons. The terminal supports `git commit --amend` (with `-m`, `--no-edit` or the editor) for
+  the latest commit, and `git push --force-with-lease` to publish rewritten history; on shared
+  branches, still teach a new commit or `git revert`.
 
 **Challenges.** Lessons of `type: challenge` and standalone challenges
 ([challenge-authoring.md](./challenge-authoring.md#adaptive-hints)) use adaptive hints too, but no

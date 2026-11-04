@@ -152,9 +152,9 @@ describe("git rebase -i", () => {
     const unknown = await ws.git.closeEditor(plan(todo, (lines) => ["frobnicate abc", ...lines]));
     expect(unknown.output).toContain("error: invalid line 1: frobnicate abc");
     const unsupported = await ws.git.closeEditor(
-      plan(todo, ([a = "", ...rest]) => [retag(a, "edit"), ...rest]),
+      plan(todo, (lines) => ["exec npm test", ...lines]),
     );
-    expect(unsupported.output).toContain("GitDojo does not support 'edit'");
+    expect(unsupported.output).toContain("GitDojo has no shell, so it cannot run 'npm test'");
     const badCommit = await ws.git.closeEditor("pick zzzzzzz Nope\n");
     expect(badCommit.output).toContain("could not parse 'zzzzzzz'");
     // Nothing happened: HEAD never moved.

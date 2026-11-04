@@ -3,7 +3,8 @@ import git from "isomorphic-git";
 import { type GitContext } from "../engine/context";
 import { formatChangeSummary } from "../engine/diff";
 import { failure, gitError, notARepository, success } from "../engine/errors";
-import { DEFAULT_AUTHOR, type GitPickResult, type GitSequencerAction } from "../engine/git-engine";
+import { learnerIdentity } from "../engine/config";
+import { type GitPickResult, type GitSequencerAction } from "../engine/git-engine";
 import {
   operationInProgressMessage,
   operationKind,
@@ -110,12 +111,13 @@ export async function commitPick(
   const head = await resolveRefOrNull(ctx, "HEAD");
   const branch = await currentBranch(ctx);
   // The committer is always the learner, now; the author may be the original one.
+  const learner = await learnerIdentity(ctx);
   const oid = await git.commit({
     fs: ctx.fs,
     dir: ctx.dir,
     message: pick.message,
-    author: pick.author ?? DEFAULT_AUTHOR,
-    committer: DEFAULT_AUTHOR,
+    author: pick.author ?? learner,
+    committer: learner,
   });
   await logHeadMove(ctx, { from: head, to: oid, message: reflogMessage, branch });
   return oid;

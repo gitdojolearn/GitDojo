@@ -6,17 +6,37 @@ import { FilePen, TriangleAlert } from "lucide-react";
 import { useId, useState } from "react";
 import { useGitEditorStore } from "../state/use-git-editor-store";
 
-const HELP: Record<PendingEditorState["purpose"], string> = {
-  todo: "Change the word at the start of a line to pick, reword, squash, fixup or drop. Move lines to reorder commits, or delete a line to drop its commit. Lines starting with # are ignored.",
-  message:
-    "Write the commit message: a short first line, then a blank line and any details. Lines starting with # are ignored, and an empty message is refused.",
-};
+const COMMIT_MESSAGE_HELP =
+  "Write the commit message: a short first line, then a blank line and any details. Lines starting with # are ignored, and an empty message is refused.";
+
+/** What the learner is editing, how to fill it in, and what closing without saving does. */
+function describe(editor: PendingEditorState): { help: string; label: string; abort: string } {
+  if (editor.purpose === "todo") {
+    return {
+      help: "Change the word at the start of a line to pick, reword, edit, squash, fixup or drop, or add break, label, reset and merge lines. Move lines to reorder commits, or delete a line to drop its commit. Lines starting with # are ignored.",
+      label: "Rebase todo list",
+      abort: "Abort rebase",
+    };
+  }
+  if (editor.operation === "tag") {
+    return {
+      help: "Write the tag's message, usually what this release contains. Lines starting with # are ignored, and an empty message is refused.",
+      label: "Tag message",
+      abort: "Cancel tag",
+    };
+  }
+  return {
+    help: COMMIT_MESSAGE_HELP,
+    label: "Commit message",
+    abort: editor.operation === "commit" ? "Cancel commit" : "Abort rebase",
+  };
+}
 
 /**
- * The editor Git opens during `git rebase -i`, as a dialog. The terminal command stays busy
- * until the learner chooses: **Save and close** hands the text to Git, **Abort rebase** is
- * `git rebase --abort`. Escape and clicking outside do nothing, so an edited todo list is never
- * thrown away by accident.
+ * The editor Git opens for `git rebase -i`, `git commit --amend` and `git tag -a`, as a dialog.
+ * The terminal command stays busy until the learner chooses: **Save and close** hands the text to
+ * Git; the other button closes it without saving (`git rebase --abort`, or no commit or tag).
+ * Escape and clicking outside do nothing, so an edited file is never thrown away by accident.
  */
 export function GitEditorDialog() {
   const editor = useGitEditorStore((state) => state.editor);
@@ -45,6 +65,7 @@ function GitEditorBody({ editor }: { editor: PendingEditorState }) {
   const [draft, setDraft] = useState(editor.content);
   const textareaId = useId();
   const errorId = useId();
+  const { help, label, abort } = describe(editor);
   const save = () => {
     answer({ action: "save", content: draft });
   };
@@ -58,7 +79,7 @@ function GitEditorBody({ editor }: { editor: PendingEditorState }) {
           </Badge>
           <DialogTitle className="font-mono text-body">{editor.file}</DialogTitle>
         </div>
-        <DialogDescription className="mt-1.5">{HELP[editor.purpose]}</DialogDescription>
+        <DialogDescription className="mt-1.5">{help}</DialogDescription>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-5">
         {editor.error ? (
@@ -73,7 +94,7 @@ function GitEditorBody({ editor }: { editor: PendingEditorState }) {
           </p>
         ) : null}
         <label htmlFor={textareaId} className="text-caption font-semibold text-fg-secondary">
-          {editor.purpose === "todo" ? "Rebase todo list" : "Commit message"}
+          {label}
         </label>
         <textarea
           id={textareaId}
@@ -107,7 +128,7 @@ function GitEditorBody({ editor }: { editor: PendingEditorState }) {
             answer({ action: "abort" });
           }}
         >
-          Abort rebase
+          {abort}
         </Button>
         <Button data-testid="git-editor-save" onClick={save}>
           Save and close

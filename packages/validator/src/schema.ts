@@ -21,6 +21,7 @@ export const validatorDefinitionSchema = z.discriminatedUnion("type", [
     status: z.enum(["untracked", "modified", "staged", "committed", "deleted", "conflicted"]),
   }),
   z.strictObject({ type: z.literal("commit_exists"), message: commitMessage.optional() }),
+  z.strictObject({ type: z.literal("commit_author_set"), message: commitMessage.optional() }),
   z.strictObject({ type: z.literal("commit_count"), count: z.number().int().nonnegative() }),
   z.strictObject({
     type: z.literal("commit_changes"),

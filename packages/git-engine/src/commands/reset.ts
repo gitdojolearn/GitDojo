@@ -1,7 +1,12 @@
 import { type GitContext } from "../engine/context";
 import { failure, gitError, notARepository, success } from "../engine/errors";
 import { type GitResetMode, type GitResetOptions, type GitResetResult } from "../engine/git-engine";
-import { clearMergeState, operationKind, readMergeState } from "../engine/merge-state";
+import {
+  clearMergeState,
+  operationKind,
+  readMergeState,
+  writeMergeState,
+} from "../engine/merge-state";
 import { matchesPathspec, parsePathspecs } from "../engine/pathspec";
 import { logHeadMove } from "../engine/reflog";
 import {
@@ -131,7 +136,11 @@ export async function runReset(
   }
 
   const operation = await readMergeState(ctx);
-  if (operation && mode === "soft") {
+  // A rebase stopped at `edit` or `break` (or after its step was committed) has nothing to
+  // resolve: resetting is how a commit is split there, and the rebase carries on afterwards.
+  const rebase = operation && operationKind(operation) === "rebase" ? operation.rebase : undefined;
+  const rebaseIdle = rebase?.current === null;
+  if (operation && mode === "soft" && !rebaseIdle) {
     return failure(
       gitError(
         "OPERATION_IN_PROGRESS",
@@ -150,8 +159,18 @@ export async function runReset(
       const tracked = new Set([...index.keys(), ...headTree.keys(), ...targetTree.keys()]);
       await resetIndexPaths(ctx, tracked, targetTree, target);
     }
-    // Resetting the index or files abandons a stopped merge, revert or cherry-pick.
-    if (operation) await clearMergeState(ctx);
+    // Resetting the index or files abandons a stopped merge, revert or cherry-pick. A rebase
+    // stays in progress, as in Git: only the stopped step's conflicts are given up.
+    if (operation && rebase) {
+      await writeMergeState(ctx, {
+        ...operation,
+        conflicts: [],
+        touched: [],
+        rebase: { ...rebase, current: null },
+      });
+    } else if (operation) {
+      await clearMergeState(ctx);
+    }
   }
 
   await moveHead(ctx, branch, target);

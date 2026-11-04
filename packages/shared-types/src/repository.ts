@@ -97,8 +97,10 @@ export interface RemoteState {
 export interface PendingEditorState {
   /** The file Git opened, e.g. `git-rebase-todo` or `COMMIT_EDITMSG`. */
   file: string;
-  /** `todo`: the interactive rebase plan; `message`: a commit message. */
+  /** `todo`: the interactive rebase plan; `message`: a commit or tag message. */
   purpose: "todo" | "message";
+  /** The command waiting: `git rebase -i`, `git commit --amend` or `git tag -a`. */
+  operation: "rebase" | "commit" | "tag";
   /** The file's current content, comments included. */
   content: string;
   /** Why the last attempt to close the editor was refused, if it was. */

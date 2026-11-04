@@ -52,12 +52,13 @@ describe("git tag", () => {
     expect((await ws.git.snapshot()).tags.map((tag) => tag.annotated)).toEqual([true, true]);
   });
 
-  it("refuses an annotated tag without a message", async () => {
+  it("opens the editor for an annotated tag without a message, tagging nothing yet", async () => {
     const { ws } = await repo();
     const result = await ws.git.createTag("v1.0", { annotated: true });
-    expect(result.ok).toBe(false);
-    expect(result.error?.code).toBe("INVALID_ARGUMENT");
-    expect((await ws.git.snapshot()).tags).toEqual([]);
+    expect(result.ok).toBe(true);
+    const snapshot = await ws.git.snapshot();
+    expect(snapshot.tags).toEqual([]);
+    expect(snapshot.editor?.file).toBe("TAG_EDITMSG");
   });
 
   it("refuses duplicates, invalid names and unknown commits", async () => {

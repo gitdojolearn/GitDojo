@@ -7,7 +7,7 @@ title: Remotes and Collaboration
 description: >
   Work with other people: how local branches relate to origin/main, fetching without changing
   anything, pulling changes in, pushing a branch, and reading a rejected push, then doing it all
-  hands-on against a simulated origin.
+  hands-on against a simulated origin, including publishing rewritten history safely.
 
 difficulty: intermediate
 order: 7
@@ -17,5 +17,7 @@ lessons:
   - git-fetch
   - git-pull
   - git-push
+  - clone-a-repository
   - push-a-branch
   - sync-with-remote
+  - force-push-safely

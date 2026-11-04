@@ -55,7 +55,9 @@ export type EducationalCode =
   | "PUSH_REJECTED"
   | "DIVERGENT_BRANCHES"
   | "EDITOR_OPEN"
-  | "INVALID_REBASE_TODO";
+  | "INVALID_REBASE_TODO"
+  | "CONFIG_NOT_SET"
+  | "CLONE_DESTINATION_NOT_EMPTY";
 
 interface Context {
   input: ExplainInput;
@@ -75,6 +77,7 @@ const LEARN = {
   status: { course: "git-basics", lesson: "git-status", title: "Understanding git status" },
   staging: { course: "git-basics", lesson: "staging-area", title: "Staging Area" },
   commit: { course: "git-basics", lesson: "git-commit", title: "Create Your First Commit" },
+  config: { course: "git-basics", lesson: "git-config", title: "Tell Git Who You Are" },
   log: { course: "git-basics", lesson: "git-log", title: "Understanding Commit History" },
   branch: { course: "branching", lesson: "git-branch", title: "Create Your First Branch" },
   switch: { course: "branching", lesson: "git-switch", title: "Switch Between Branches" },
@@ -384,18 +387,61 @@ const EXPLANATIONS: Record<EducationalCode, (ctx: Context) => Explanation> = {
     learnMore: LEARN.push,
   }),
 
-  PUSH_REJECTED: () => ({
-    title: "The remote has commits you do not have",
-    explanation:
-      "A push may only move a remote branch forward. Somebody else pushed commits your branch does not contain, so accepting your push would throw their work away.",
-    concept: "remotes",
-    possibleCauses: ["A teammate pushed to the same branch since you last fetched."],
-    hints: [
-      "Fetch first, and look at what they added.",
-      "Integrate their commits (pull with a merge or a rebase), then push again.",
-    ],
-    learnMore: LEARN.sync,
-  }),
+  PUSH_REJECTED: ({ input }) => {
+    const { output } = input;
+    if (output.includes("(already exists)")) {
+      return {
+        title: "The remote already has that tag",
+        explanation:
+          "A tag on the remote names a different commit. Git never moves a published tag on its own, because others may already rely on it.",
+        concept: "tags",
+        hints: [
+          "Pick a new tag name for the new commit.",
+          "Only if nobody uses the old one: `git push --force origin <tag>` moves it.",
+        ],
+      };
+    }
+    if (output.includes("(stale info)")) {
+      return {
+        title: "Someone pushed since you last fetched",
+        explanation:
+          "`--force-with-lease` only replaces the remote branch if it is still where `origin/*` says. It has moved, so forcing now would delete commits you have never seen.",
+        concept: "remotes",
+        hints: [
+          "Run `git fetch` and look at what arrived with `git log --all --oneline`.",
+          "Integrate it (rebase onto it), then push with `--force-with-lease` again.",
+        ],
+        learnMore: LEARN.sync,
+      };
+    }
+    // `non-fast-forward` with nothing unseen: this branch's own history was rewritten.
+    const rewritten = output.includes("(non-fast-forward)");
+    return {
+      title: rewritten
+        ? "Your branch no longer contains what the remote has"
+        : "The remote has commits you do not have",
+      explanation: rewritten
+        ? "A plain push may only move a remote branch forward. Your branch no longer contains the remote's latest commit, usually because an amend or rebase replaced it, so accepting the push would delete that commit from the remote."
+        : "A push may only move a remote branch forward. Somebody else pushed commits your branch does not contain, so accepting your push would throw their work away.",
+      concept: "remotes",
+      possibleCauses: rewritten
+        ? [
+            "You amended or rebased commits you had already pushed.",
+            "Your branch is behind the remote and you have not pulled yet.",
+          ]
+        : ["A teammate pushed to the same branch since you last fetched."],
+      hints: rewritten
+        ? [
+            "If the remote commit was meant to go, and nobody else uses the branch: `git push --force-with-lease`.",
+            "Otherwise integrate it first (pull with a merge or a rebase), then push again.",
+          ]
+        : [
+            "Fetch first, and look at what they added.",
+            "Integrate their commits (pull with a merge or a rebase), then push again.",
+          ],
+      learnMore: LEARN.sync,
+    };
+  },
 
   DIVERGENT_BRANCHES: () => ({
     title: "Your branch and the remote have both moved on",
@@ -409,22 +455,59 @@ const EXPLANATIONS: Record<EducationalCode, (ctx: Context) => Explanation> = {
     learnMore: LEARN.sync,
   }),
 
-  EDITOR_OPEN: () => ({
-    title: "Git is waiting for the editor",
+  EDITOR_OPEN: ({ input }) => {
+    const rebase = input.output.includes("git rebase --abort");
+    return {
+      title: "Git is waiting for the editor",
+      explanation: rebase
+        ? "An interactive rebase opened a file for you to edit. Until you save and close it, Git is busy, just like a terminal would be."
+        : "Git opened a file for your message. Until you save and close it, Git is busy, just like a terminal would be.",
+      concept: rebase ? "rebase" : "commits",
+      hints: [
+        rebase
+          ? "Save and close the editor to go on, or cancel with `git rebase --abort`."
+          : "Save and close the editor to go on, or close it without saving to cancel.",
+      ],
+      ...(rebase ? { learnMore: LEARN.interactiveRebase } : {}),
+    };
+  },
+
+  CLONE_DESTINATION_NOT_EMPTY: ({ repository }) => ({
+    title: "Clone needs an empty folder",
     explanation:
-      "An interactive rebase opened a file for you to edit. Until you save and close it, Git is busy, just like a terminal would be.",
-    concept: "rebase",
-    hints: ["Save and close the editor to go on, or cancel with `git rebase --abort`."],
-    learnMore: LEARN.interactiveRebase,
+      "`git clone` creates a brand-new repository from the server's copy, so the folder it clones into must be empty. This one already has files or a repository.",
+    concept: "remotes",
+    possibleCauses: repository?.initialized
+      ? ["This folder is already a Git repository, for example after `git init`."]
+      : ["The folder already has files in it."],
+    hints: [
+      "In a lesson, **Reset** puts the folder back to how it started.",
+      "To get the server's changes into an existing clone, use `git fetch` or `git pull` instead.",
+    ],
   }),
+
+  CONFIG_NOT_SET: ({ args }) => {
+    const key = args.find((arg) => !arg.startsWith("-"));
+    return {
+      title: "That setting has no value",
+      explanation: `Git found no value for ${key === undefined ? "that setting" : `\`${key}\``}, so it printed nothing. Settings live in the repository's \`.git/config\`, or in your own \`~/.gitconfig\` with \`--global\`.`,
+      concept: "config",
+      hints: [
+        "List every setting with `git config --list`.",
+        'Set one with `git config --global user.name "Your Name"`.',
+      ],
+      learnMore: LEARN.config,
+    };
+  },
 
   INVALID_REBASE_TODO: () => ({
     title: "Git could not read the rebase plan",
     explanation:
-      "Each line of the todo list must start with a command (`pick`, `reword`, `squash`, `fixup` or `drop`) followed by a commit id. The editor stays open with your text so you can fix it.",
+      "Each line of the todo list must start with a command (`pick`, `reword`, `edit`, `squash`, `fixup` or `drop`) followed by a commit id, or be a `break`, `label`, `reset` or `merge` line. The editor stays open with your text so you can fix it.",
     concept: "rebase",
     possibleCauses: [
-      "A line starts with a word Git does not know, or a command GitDojo does not support yet.",
+      "A line starts with a word Git does not know, or `exec`, which needs a shell GitDojo does not have.",
+      "A `reset` or `merge` names a label that no earlier `label` line set.",
       "The first commit is `squash` or `fixup`: there is no earlier commit to fold it into.",
     ],
     hints: ["Fix the line and save again, or cancel with `git rebase --abort`."],
@@ -762,6 +845,7 @@ const ERROR_CODE_EXPLANATIONS: Record<CommandErrorCode, ErrorMapping> = {
   DIVERGENT_BRANCHES: "DIVERGENT_BRANCHES",
   EDITOR_OPEN: "EDITOR_OPEN",
   INVALID_TODO: "INVALID_REBASE_TODO",
+  CONFIG_NOT_SET: "CONFIG_NOT_SET",
   // One engine code for many argument problems: the output says which.
   INVALID_ARGUMENT: (output) => {
     if (output.includes("commit message is required")) return "COMMIT_MESSAGE_REQUIRED";
@@ -769,6 +853,9 @@ const ERROR_CODE_EXPLANATIONS: Record<CommandErrorCode, ErrorMapping> = {
       return "NOTHING_SPECIFIED";
     }
     if (output.includes("is outside repository")) return "PATH_NOT_FOUND";
+    if (output.includes("destination path '.' already exists")) {
+      return "CLONE_DESTINATION_NOT_EMPTY";
+    }
     return null;
   },
   UNSUPPORTED_PROGRAM: "COMMAND_NOT_FOUND",

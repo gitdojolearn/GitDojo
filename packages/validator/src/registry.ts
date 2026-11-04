@@ -8,6 +8,7 @@ import { branchesMerged } from "./validators/branches-merged";
 import { cleanWorktree } from "./validators/clean-worktree";
 import { commitChanges, fileContent } from "./validators/content";
 import { commitCount } from "./validators/commit-count";
+import { commitAuthorSet } from "./validators/commit-author";
 import { commitExists } from "./validators/commit-exists";
 import { commitOnBranch } from "./validators/commit-on-branch";
 import {
@@ -48,6 +49,7 @@ export const validatorRegistry: ValidatorRegistry = {
   file_content: fileContent,
   file_status: fileStatus,
   commit_exists: commitExists,
+  commit_author_set: commitAuthorSet,
   commit_count: commitCount,
   commit_changes: commitChanges,
   clean_worktree: cleanWorktree,

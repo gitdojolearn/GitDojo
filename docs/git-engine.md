@@ -138,12 +138,29 @@ kept in `cause` for debugging and is never rendered.
 | `DIVERGENT_BRANCHES`    | `pull` with no `--rebase` / `--no-rebase` when both moved on        | `fatal: Need to specify how to reconcile divergent branches.`          |
 | `EDITOR_OPEN`           | Anything that changes the repository while Git waits for the editor | `error: Git is waiting for you to close the editor (...)`              |
 | `INVALID_TODO`          | An interactive rebase todo list Git cannot run                      | e.g. `error: invalid line 2: frob abc1234`                             |
+| `CONFIG_NOT_SET`        | `config <name>` or `--unset` for a setting with no value            | Nothing, as in Git                                                     |
 | `UNKNOWN`               | Unexpected internal failure                                         | Generic message                                                        |
 
 ### Behavior notes
 
-- `init` uses `main` as the default branch. Running it twice prints
+- `init` uses `init.defaultBranch` from `git config --global` as the first branch, else `main`
+  (lesson setup always passes `main`). Running it twice prints
   `Reinitialized existing Git repository` and keeps history.
+- `config [--global | --local] [--get | --unset | --list] <name> [<value>]` reads and writes
+  `.git/config` or the learner's `~/.gitconfig`, which lives at `/gitdojo-home/.gitconfig`,
+  outside every workspace, so it is shared by all of them like a real home directory. Edits
+  change only the lines involved. `user.name` and `user.email` (local over global) are the author
+  and committer of the learner's commits, the tagger of their tags and the identity in reflogs,
+  falling back to `GitDojo Learner <learner@gitdojo.local>`; lesson setup commits always use that
+  default. They may not contain `<`, `>` or line breaks. `commit --amend --reset-author` re-authors
+  the latest commit with the current identity. `pull.rebase` and `pull.ff` choose `pull`'s mode.
+- `mv [-f] <source>... <destination>` renames tracked files or whole directories (untracked files
+  inside move along unstaged), or moves several sources into an existing directory. The index
+  entry moves, so unstaged edits stay unstaged. Untracked sources, existing destinations (without
+  `-f`) and moving a directory into itself fail with Git's messages.
+- `show` of a merge prints `Merge: a b` and a combined (`--cc`) diff: only paths and hunks that
+  differ from every parent, one marker column per parent. A clean merge shows its metadata only;
+  a conflict resolution shows up as `++` lines.
 - `add` validates every pathspec before changing the index, so a typo stages nothing. A pathspec
   also stages deletions under it, like modern Git (`git add .` records removed files).
 - `status` mirrors Git's long format, including its hints.
@@ -268,24 +285,44 @@ everything back; `rebase --skip` drops the stopped commit and goes on.
 Real Git starts an editor and waits for it to exit. GitDojo's editor is part of the page, so the
 wait is **state**: `.git/GITDOJO_EDITOR.json` records which file Git opened, its text, and what
 happens once it is saved (Git's own `git-rebase-todo` is written next to it). The snapshot exposes
-it as `editor` (`{ file, purpose: "todo" | "message", content, error? }`) and the web app shows it
-in a dialog; the terminal command stays busy until the learner closes it.
+it as `editor` (`{ file, purpose: "todo" | "message", operation, content, error? }`) and the web
+app shows it in a dialog; the terminal command stays busy until the learner closes it.
+`operation` is `rebase`, `commit` (`git commit --amend` without `-m` or `--no-edit`, editing
+`COMMIT_EDITMSG`) or `tag` (`git tag -a` without `-m`, editing `TAG_EDITMSG`). `closeEditor`
+carries the operation on with the saved text; `abortEditor` is closing without saving:
+`git rebase --abort` for a rebase, and no commit or tag otherwise (`Aborting commit due to empty
+commit message.` / `fatal: no tag message?`). An empty message keeps the editor open with the
+reason, for all three.
 
 - `git rebase -i <upstream>` checks the same preconditions as a rebase, then writes the todo list
   (`pick <id> <subject>` per commit not on `upstream`, oldest first, with Git's help comments) and
   returns `data.status: "editing"`. **Nothing has changed yet**: HEAD is still on the branch.
-- `closeEditor(text)` parses the saved todo list. `pick`, `reword`, `squash`, `fixup` and `drop`
-  (and `p`, `r`, `s`, `f`, `d`) are supported; lines can be reordered, deleted lines drop their
-  commit, `#` lines are ignored, and an empty list is `Nothing to do`. `edit`, `exec`, `break`,
-  `label`, `reset`, `merge` and `fixup -C` are refused with a "not supported yet" message, as are
-  unknown words, unknown commits and a first `squash`/`fixup` (Git's
-  `cannot 'squash' without a previous commit`). A refused list keeps the editor open with the
-  learner's text and the reason in `error`.
+- `closeEditor(text)` parses the saved todo list. Every Git todo command except `exec` and
+  `update-ref` is supported, with its short form: `pick`, `reword`, `edit`, `squash`,
+  `fixup [-C | -c]`, `drop`, `break`, `label`, `reset` and `merge [-C | -c <commit>] <label>
+[# <oneline>]`. Lines can be reordered, deleted lines drop their commit, `#` lines are ignored,
+  and an empty list is `Nothing to do`. `exec` is refused because there is no shell (the message
+  suggests a `break` instead), as are unknown words, unknown commits, a `reset` or `merge` naming
+  a label no earlier `label` line set (`onto` is always defined), octopus merges and a first
+  `squash`/`fixup` (Git's `cannot 'squash' without a previous commit`). A refused list keeps the
+  editor open with the learner's text and the reason in `error`.
 - Steps then run with the same three-way machinery as `git rebase`. A `pick` whose parent is
   already HEAD keeps the original commit, as Git does, so an unchanged plan changes nothing.
   `squash`/`fixup` fold their changes into the previous commit (keeping its author); at the end
   of a chain with a `squash`, Git asks for the combined message (`# This is a combination of N
 commits.`). `reword` asks for a new message. An empty message is refused and asked for again.
+  `fixup -C` keeps the fixup commit's message instead of the previous one; `fixup -c` does the
+  same, then opens the editor on it.
+- `edit` replays its commit and stops (`data.status: "stopped"`, `Stopped at abc1234...`); `break`
+  stops between steps. While stopped, `status` says so, HEAD may move freely (`git commit
+--amend`, `git reset HEAD~1` to split the commit, new commits), and `git rebase --continue`
+  replays the rest on top of wherever HEAD is. It refuses staged or unstaged changes, as Git
+  does. `git reset` keeps the rebase in progress (only a stopped step's conflicts are given up).
+- `label <name>` names HEAD; `reset <label>` checks that point out (detached); `merge <label>`
+  three-way merges it into HEAD and records a merge commit, with the `-C` commit's message and
+  author, the line's `# oneline`, or `Merge branch '<label>'`. A merge that conflicts stops like
+  a pick, and `--continue` (or `git commit`) records the merge with both parents. GitDojo never
+  writes these lines itself (there is no `--rebase-merges`); learners type them to rebuild merges.
 - Conflicts stop exactly like a regular rebase (`interactive rebase in progress` in `status`);
   `--continue` finishes the stopped step the way its action says (a new commit, a fold, or a
   reword that then asks for the message).
@@ -293,7 +330,8 @@ commits.`). `reword` asks for a new message. An empty message is refused and ask
   While Git waits, every other command that changes the repository is refused with
   `EDITOR_OPEN`; `status`, `log`, `diff`, `reflog` and listing commands still work.
 - Reflog entries use Git's wording: `rebase (start)`, `rebase (pick)`, `rebase (squash)`,
-  `rebase (fixup)`, `rebase (reword)`, `rebase (finish)`.
+  `rebase (fixup)`, `rebase (reword)`, `rebase (reset): '<label>'`, `rebase (merge)`,
+  `rebase (finish)`.
 
 ### Tags
 
@@ -301,30 +339,44 @@ commits.`). `reword` asks for a new message. An empty message is refused and ask
   annotated tag's message (or the commit subject for a lightweight tag).
 - `git tag <name> [<commit>]` creates a lightweight tag (a ref to the commit);
   `git tag -a <name> -m <message> [<commit>]` an annotated tag object, tagged by the learner.
-  `-m` alone also makes an annotated tag, as in Git. GitDojo opens no editor for tag messages, so
-  `-a` without `-m` is refused with a hint.
+  `-m` alone also makes an annotated tag, as in Git; `-a` without `-m` opens `TAG_EDITMSG` in the
+  editor, and the tag is created at the commit named when it opened. An empty `-m` is refused
+  (`fatal: no tag message?`).
 - `git tag -d <name>` deletes a tag (`Deleted tag 'v1.0' (was abc1234)`); the commit stays.
 - Tag names follow branch-name rules. Tags decorate `git log` (`tag: v1.0`), resolve as revisions,
   keep their commits in `allCommits` (and the graph), and appear in the snapshot's `tags`, peeled
   to their commit. `git switch v1.0` says `a branch is expected, got tag 'v1.0'`.
-- Pushing tags to a remote is not supported.
+- `git push --tags` pushes every tag, `git push <remote> <tag>` one; a tag the server already has
+  at another commit is rejected `(already exists)` unless forced. `git fetch` brings the server's
+  tags down, never replacing a local tag of the same name.
 
 ### Simulated remotes
 
 GitDojo has no network, so every remote is **simulated** inside the workspace
 (`src/engine/remote-store.ts`):
 
-- A remote is a normal `[remote "<name>"]` entry in `.git/config`, with a
-  `gitdojo://simulated/<name>.git` URL that cannot be mistaken for a real one, plus the branches
-  its pretend server has, in `.git/GITDOJO_REMOTES.json`.
+- A remote is a normal `[remote "<name>"]` entry in `.git/config`, usually with a
+  `gitdojo://simulated/<name>.git` URL that cannot be mistaken for a real one. The branches and
+  tags each pretend server has live in `.git/GITDOJO_REMOTES.json`, keyed by URL (records from
+  before that, keyed by remote name, move over the first time a remote changes).
 - The server shares the workspace's object database. A commit "only on the server" is stored, but
   no local ref reaches it, so `git log --all`, the graph and every validator ignore it until a
   fetch moves `origin/*` onto it. Commits only ever cross the boundary through `fetch`, `pull` and
   `push`.
-- Remotes are created by lesson setup only (`setupRemote`, `setupRemoteCommit`): a "clone" that
-  gives each listed branch a remote-tracking branch and an upstream, and commits somebody else
-  pushed. `git remote add`, `remove`, `rename` and `set-url` are refused, and `git clone` is not
-  available.
+- Lesson setup creates remotes with `setupRemote` (a "clone" that gives each listed branch a
+  remote-tracking branch and an upstream) and `setupRemoteCommit` (commits somebody else pushed).
+  Learners manage them with `git remote add | remove | rename | set-url | get-url`: `rename`
+  moves the remote-tracking branches and upstreams too, `remove` deletes them. Any URL is
+  accepted; one no server exists for yet is an empty repository, as if just created on a host,
+  and pushing to it creates the branch there. Pushes to a URL that is not `gitdojo://...` say that
+  nothing left the browser.
+- `git clone <url> [.]` needs an empty workspace (each holds one repository, so it clones into
+  `.`; another folder name is refused with that hint). Lesson setup's `setupCloneSource(name)`
+  moves the history it built into `/gitdojo-servers/<workspace>/<name>.git`, outside every
+  workspace, and empties the workspace; cloning `gitdojo://simulated/<name>.git` copies the
+  objects back, adds `origin`, fetches every branch and tag, and checks out the server's current
+  branch tracking `origin/<branch>` (reflog: `clone: from <url>`). Other URLs fail with the
+  no-network message.
 
 Behaviour:
 
@@ -334,13 +386,16 @@ Behaviour:
 - `git push [-u] [<remote> [<branch>]]` follows `push.default=simple`: without arguments it needs
   an upstream (`--set-upstream` hint otherwise); `-u` records one. A push that is not a
   fast-forward is rejected: `(fetch first)` when the server's commit is unknown locally,
-  `(non-fast-forward)` once it has been fetched. Force pushes and `src:dst` refspecs are not
-  supported.
+  `(non-fast-forward)` once it has been fetched. `--force-with-lease` replaces the branch only if
+  the server still has what `origin/<branch>` says (`(stale info)` otherwise); `--force` always
+  does; both print `+ a...b (forced update)`. `--delete <branch>` (or `:<branch>`) deletes it on
+  the server and its remote-tracking branch. `src:dst` refspecs are not supported.
 - `git pull [--rebase | --no-rebase | --ff-only] [<remote> [<branch>]]` fetches, then
   fast-forwards when it can. When both sides have new commits and no mode is given it refuses
   with Git's `Need to specify how to reconcile divergent branches` (the fetch has already
   happened); `--rebase` rebases onto the upstream, `--no-rebase` merges
-  (`Merge branch 'main' of <url>`), `--ff-only` refuses.
+  (`Merge branch 'main' of <url>`), `--ff-only` refuses. Without an option, `pull.rebase`
+  (`true` / `false`) and `pull.ff=only` from `git config` choose, as the refusal's hint says.
 - `git status` reports `ahead` / `behind` / `diverged` / `up to date` against the upstream, and
   `git branch -vv` shows `[origin/main: ahead 1, behind 2]`. `git branch -r` and `-a` list
   remote-tracking branches. `-v` and `-vv` both show the upstream.

@@ -1,4 +1,6 @@
 import {
+  CLONE_USAGE,
+  CONFIG_USAGE,
   MERGE_USAGE,
   REBASE_USAGE,
   TAG_USAGE,
@@ -66,15 +68,14 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
     if (parsed.flags["no-edit"] === true && !amend) {
       return invalidArgument("fatal: --no-edit requires --amend");
     }
-    if (amend && typeof message !== "string" && parsed.flags["no-edit"] !== true) {
-      return invalidArgument(
-        "error: GitDojo does not open an editor; use -m <message> or --no-edit",
-      );
+    if (parsed.flags["reset-author"] === true && !amend) {
+      return invalidArgument("fatal: --reset-author can be used only with --amend.");
     }
     return git.commit({
       message: typeof message === "string" ? message : "",
       amend,
       noEdit: parsed.flags["no-edit"] === true,
+      resetAuthor: parsed.flags["reset-author"] === true,
     });
   },
   log: (parsed, { git }) => {
@@ -86,7 +87,7 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
     });
   },
   show: (parsed, { git }) => git.show(parsed.args[0]),
-  mv: (parsed, { git }) => git.mv(parsed.args),
+  mv: (parsed, { git }) => git.mv(parsed.args, { force: parsed.flags.f === true }),
   branch: (parsed, { git }) => {
     const [name, startPoint] = parsed.args;
     const remove = parsed.flags.d === true || parsed.flags.D === true;
@@ -238,15 +239,65 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
       annotated: parsed.flags.a === true,
     });
   },
-  remote: (parsed, { git }) => {
-    const [subcommand] = parsed.args;
-    if (subcommand === undefined) return git.listRemotes({ verbose: parsed.flags.v === true });
-    if (["add", "remove", "rm", "rename", "set-url"].includes(subcommand)) {
-      return invalidArgument(
-        `fatal: GitDojo cannot change remotes: its sandbox has no network.\nhint: Lessons come with a simulated remote; see it with 'git remote -v'.`,
-      );
+  config: (parsed, { git }) => {
+    if (parsed.flags.global === true && parsed.flags.local === true) {
+      return invalidArgument("error: only one config file at a time");
     }
-    return invalidArgument(`error: unknown subcommand: \`${subcommand}'\nusage: git remote [-v]`);
+    const scope =
+      parsed.flags.global === true ? "global" : parsed.flags.local === true ? "local" : undefined;
+    const actions = (["list", "get", "unset"] as const).filter(
+      (flag) => parsed.flags[flag] === true,
+    );
+    if (actions.length > 1)
+      return invalidArgument(`error: only one action at a time\n${CONFIG_USAGE}`);
+    const [key, value] = parsed.args;
+    const action = actions[0] ?? (value === undefined ? "get" : "set");
+    if (action === "list" ? key !== undefined : action !== "set" && value !== undefined) {
+      return invalidArgument(`error: wrong number of arguments\n${CONFIG_USAGE}`);
+    }
+    return git.config({
+      action,
+      ...(key === undefined ? {} : { key }),
+      ...(value === undefined ? {} : { value }),
+      ...(scope === undefined ? {} : { scope }),
+    });
+  },
+  remote: (parsed, { git }) => {
+    const [subcommand, first, second] = parsed.args;
+    if (subcommand === undefined) return git.listRemotes({ verbose: parsed.flags.v === true });
+    const usage = `usage: ${GIT_COMMAND_SPECS.remote.usage}`;
+    const needs = (count: number, form: string) =>
+      parsed.args.length - 1 === count ? null : invalidArgument(`usage: git remote ${form}`);
+    switch (subcommand) {
+      case "add":
+        return (
+          needs(2, "add <name> <url>") ??
+          git.remote({ action: "add", name: first ?? "", url: second ?? "" })
+        );
+      case "remove":
+      case "rm":
+        return needs(1, "remove <name>") ?? git.remote({ action: "remove", name: first ?? "" });
+      case "rename":
+        return (
+          needs(2, "rename <old> <new>") ??
+          git.remote({ action: "rename", name: first ?? "", newName: second ?? "" })
+        );
+      case "set-url":
+        return (
+          needs(2, "set-url <name> <url>") ??
+          git.remote({ action: "set-url", name: first ?? "", url: second ?? "" })
+        );
+      case "get-url":
+        return needs(1, "get-url <name>") ?? git.remote({ action: "get-url", name: first ?? "" });
+      default:
+        return invalidArgument(`error: unknown subcommand: \`${subcommand}'\n${usage}`);
+    }
+  },
+  clone: (parsed, { git }) => {
+    const [url, directory] = parsed.args;
+    return url === undefined
+      ? invalidArgument(`fatal: You must specify a repository to clone.\n\n${CLONE_USAGE}`)
+      : git.clone(url, directory);
   },
   fetch: (parsed, { git }) => git.fetch(parsed.args[0]),
   pull: (parsed, { git }) => {
@@ -267,10 +318,22 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
   },
   push: (parsed, { git }) => {
     const [remote, branch] = parsed.args;
+    if (parsed.flags.f === true && parsed.flags["force-with-lease"] === true) {
+      return invalidArgument("fatal: choose one of --force and --force-with-lease");
+    }
+    const force =
+      parsed.flags["force-with-lease"] === true
+        ? "lease"
+        : parsed.flags.f === true
+          ? "force"
+          : null;
     return git.push({
       ...(remote === undefined ? {} : { remote }),
       ...(branch === undefined ? {} : { branch }),
       setUpstream: parsed.flags.u === true,
+      ...(force === null ? {} : { force }),
+      ...(parsed.flags.d === true ? { delete: true } : {}),
+      ...(parsed.flags.tags === true ? { tags: true } : {}),
     });
   },
   // Kept for comparison with older tutorials: switching branches and visiting commits.

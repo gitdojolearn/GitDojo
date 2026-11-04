@@ -1,0 +1,117 @@
+# Lesson: Clone a Repository
+# Schema and authoring guide: docs/lesson-authoring.md
+id: clone-a-repository
+slug: clone-a-repository
+title: Clone a Repository
+
+goal: Get a full copy of a team's repository with `git clone`, then start work on one of its branches.
+
+description: |
+  You have just joined the weather team. Their repository lives on a server, at
+  `gitdojo://simulated/origin.git`, and your workspace is still empty.
+
+  Clone it, then switch to the team's `feature/radar` branch so you can help with the radar map.
+
+difficulty: beginner
+
+concepts:
+  - clone
+  - remotes
+  - upstream
+
+commands:
+  - git clone
+  - git branch -a
+  - git switch
+
+content:
+  - type: example
+    title: Copy the whole repository
+    command: git clone gitdojo://simulated/origin.git .
+    output: |
+      Cloning into '.'...
+      done.
+    explanation: >-
+      `git clone` downloads every commit, branch and tag, names the server `origin`, and checks
+      out its main branch. The `.` clones into the current folder; without it, Git would create a
+      new folder named after the repository. In GitDojo, a workspace holds one repository, so the
+      clone always lands here.
+
+  - type: example
+    title: What came with it
+    command: git branch -a
+    output: |
+      * main
+        remotes/origin/feature/radar
+        remotes/origin/main
+    explanation: >-
+      Only `main` is a local branch. The server's other branches arrive as remote-tracking
+      branches such as `origin/feature/radar`: read-only bookmarks of where they were.
+
+  - type: callout
+    tone: tip
+    body: >-
+      `git switch feature/radar` notices `origin/feature/radar` and creates a local branch that
+      tracks it, so `git pull` and `git push` work on it straight away.
+
+  - type: callout
+    tone: note
+    title: Simulated servers
+    body: >-
+      GitDojo has no network access. `gitdojo://simulated/...` servers live in your browser, so
+      you can clone, push and fetch freely; nothing you type here ever reaches GitHub or any
+      other host.
+
+setup:
+  initializeGit: true
+  commits:
+    - message: Initial commit
+      files:
+        README.md: |
+          # Weather
+    - message: Add forecast panel
+      files:
+        forecast.js: |
+          export const forecast = (temperature) => `${temperature}°`;
+    - message: Add radar map skeleton
+      branch: feature/radar
+      files:
+        radar.js: |
+          export const radar = () => "TODO: draw the map";
+  server: {}
+
+objectives:
+  - id: cloned
+    description: The repository is cloned, and `main` tracks `origin/main`.
+    validator:
+      type: branch_upstream
+      branch: main
+      upstream: origin/main
+
+  - id: on-radar
+    description: "You are on a local `feature/radar` that tracks `origin/feature/radar`."
+    validator:
+      type: branch_upstream
+      branch: feature/radar
+      upstream: origin/feature/radar
+
+hints:
+  cloned:
+    - The workspace is empty. `git clone` copies a whole repository from its URL.
+    - "`git clone <url> .` clones into the current folder."
+    - Run `git clone gitdojo://simulated/origin.git .`.
+  on-radar:
+    - "`git branch -a` lists the remote-tracking branches the clone brought along."
+    - Switching to a branch that only exists as `origin/<name>` creates a local one that tracks it.
+    - Run `git switch feature/radar`.
+
+# Offered while the learner is in one of these states; see docs/lesson-authoring.md#adaptive-hints.
+adaptiveHints:
+  - id: initialized-not-cloned
+    objective: cloned
+    when:
+      - type: repository_initialized
+    hints:
+      - This folder is a new, empty repository now, and `git clone` only clones into an empty folder.
+      - Start over with **Reset** in the top bar, then clone instead of initializing.
+      - After resetting, run `git clone gitdojo://simulated/origin.git .`.

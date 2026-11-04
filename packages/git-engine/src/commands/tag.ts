@@ -1,8 +1,9 @@
 import git from "isomorphic-git";
+import { learnerIdentity } from "../engine/config";
 import { type GitContext } from "../engine/context";
+import { WAITING_FOR_EDITOR, writeEditorRecord } from "../engine/editor-state";
 import { failure, gitError, notARepository, success } from "../engine/errors";
 import {
-  DEFAULT_AUTHOR,
   type GitTagCreateOptions,
   type GitTagListOptions,
   type GitTagResult,
@@ -108,14 +109,26 @@ export async function runCreateTag(
       ),
     );
   }
-  // Real Git would open an editor for `-a` without `-m`; GitDojo asks for the message up front.
-  if (annotated && (message === undefined || message.trim() === "")) {
-    return failure(
-      gitError(
-        "INVALID_ARGUMENT",
-        'fatal: an annotated tag needs a message: git tag -a <name> -m "<message>"\nhint: GitDojo does not open an editor for tag messages.',
-      ),
-    );
+  // `-a` without `-m` opens the editor for the tag's message, as in Git.
+  if (annotated && message === undefined) {
+    await writeEditorRecord(ctx, {
+      kind: "tag",
+      purpose: "message",
+      file: "TAG_EDITMSG",
+      content: [
+        "",
+        "#",
+        "# Write a message for tag:",
+        `#   ${name}`,
+        "# Lines starting with '#' will be ignored.",
+        "",
+      ].join("\n"),
+      tag: { name, target: oid },
+    });
+    return success(WAITING_FOR_EDITOR, { tags: [] });
+  }
+  if (message !== undefined && message.trim() === "") {
+    return failure(gitError("INVALID_ARGUMENT", "fatal: no tag message?"));
   }
 
   if (message !== undefined) {
@@ -126,7 +139,7 @@ export async function runCreateTag(
       ref: name,
       object: oid,
       message: message.endsWith("\n") ? message : `${message}\n`,
-      tagger: DEFAULT_AUTHOR,
+      tagger: await learnerIdentity(ctx),
     });
   } else {
     await git.tag({ fs: ctx.fs, dir: ctx.dir, ref: name, object: oid });

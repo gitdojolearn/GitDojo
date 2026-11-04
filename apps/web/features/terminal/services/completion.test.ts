@@ -44,6 +44,18 @@ describe("terminal completion", () => {
     expect(completionCandidates("git branch -d fea", 17, context)?.candidates).toEqual([
       "feature/login",
     ]);
+    expect(completionCandidates("git config --global us", 22, context)?.candidates).toEqual([
+      "user.email",
+      "user.name",
+    ]);
+    expect(completionCandidates("git config user.name Ad", 23, context)?.candidates).toEqual([]);
+    expect(completionCandidates("git remote re", 13, context)?.candidates).toEqual([
+      "remove",
+      "rename",
+    ]);
+    expect(completionCandidates("git remote rename or", 20, context)?.candidates).toEqual([
+      "origin",
+    ]);
   });
 
   it("does not complete text inside a quoted message", () => {

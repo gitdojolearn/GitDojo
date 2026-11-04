@@ -4,12 +4,12 @@ import { run, show } from "./helpers";
 test("works through concept lessons and tracks course progress", async ({ page }) => {
   await page.goto("/learn");
   const card = page.getByTestId("course-card").filter({ hasText: "Git Basics" });
-  await expect(card).toContainText("10 lessons");
+  await expect(card).toContainText("11 lessons");
   await card.getByRole("link", { name: "Start" }).click();
 
   await expect(page).toHaveURL(/\/learn\/git-basics\/what-is-git$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("What is Git?");
-  await expect(page.getByTestId("course-navigation")).toContainText("Lesson 01 of 10");
+  await expect(page.getByTestId("course-navigation")).toContainText("Lesson 01 of 11");
   // Concept lessons have no terminal.
   await expect(page.getByTestId("terminal")).toHaveCount(0);
   await expect(page.getByTestId("demo-graph").first()).toHaveAttribute(
@@ -27,7 +27,7 @@ test("works through concept lessons and tracks course progress", async ({ page }
   // The outline marks finished, current and upcoming lessons.
   await page.getByTestId("course-navigation").click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByTestId("course-percent")).toHaveText("10%");
+  await expect(dialog.getByTestId("course-percent")).toHaveText("9%");
   const lessons = dialog.getByTestId("course-lesson");
   await expect(lessons.nth(0)).toHaveAttribute("data-status", "completed");
   await expect(lessons.nth(1)).toHaveAttribute("data-status", "current");
@@ -35,7 +35,7 @@ test("works through concept lessons and tracks course progress", async ({ page }
 
   // Progress survives a reload and shows on the course page.
   await page.goto("/learn/git-basics");
-  await expect(page.getByTestId("course-percent")).toHaveText("10%");
+  await expect(page.getByTestId("course-percent")).toHaveText("9%");
   await expect(page.getByTestId("continue-course")).toHaveAttribute(
     "href",
     "/learn/git-basics/git-vs-github",
