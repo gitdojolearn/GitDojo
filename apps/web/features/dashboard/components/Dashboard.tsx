@@ -43,6 +43,7 @@ import { CommandUsage } from "./CommandUsage";
 import { LearningJourney } from "./LearningJourney";
 import { SectionHeading } from "./SectionHeading";
 import { SkillMap } from "./SkillMap";
+import { useCountUp } from "../hooks/use-count-up";
 
 /** True for a learner who has not done anything yet. */
 function isNewLearner(progress: LocalProgress): boolean {
@@ -284,13 +285,18 @@ function Stat({
   detail?: string;
   testId: string;
 }) {
+  const shown = useCountUp(value);
   return (
     <div className="rounded-xl border border-border bg-panel p-4">
       <dt className="flex items-center gap-2 text-caption text-fg-muted">
         <Icon className="size-4" aria-hidden="true" />
         {label}
       </dt>
-      <dd className="mt-2 font-mono text-h2 font-semibold text-fg" data-testid={testId}>
+      {/* Counts up for the eye; the real number is what is read out and tested. */}
+      <dd aria-hidden="true" className="mt-2 font-mono text-h2 font-semibold text-fg tabular-nums">
+        {shown.toLocaleString("en")}
+      </dd>
+      <dd className="sr-only" data-testid={testId}>
         {value.toLocaleString("en")}
       </dd>
       {detail ? <dd className="mt-1 text-caption text-fg-muted">{detail}</dd> : null}

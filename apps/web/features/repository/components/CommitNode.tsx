@@ -2,6 +2,7 @@
 
 import { cn } from "@gitdojo/ui";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { type CSSProperties } from "react";
 import {
   COMMIT_CARD_HEIGHT,
   COMMIT_CARD_WIDTH,
@@ -46,7 +47,9 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
     tags,
     remoteBranches,
     selected,
-    latest,
+    fresh,
+    refMotion,
+    ghost,
     lane,
     railWidth,
     isMerge,
@@ -78,6 +81,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
           remoteBranches={remoteBranches}
           isHead={isHead}
           currentBranch={currentBranch}
+          motion={refMotion}
         />
       </div>
       <span
@@ -85,7 +89,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
         data-testid={isHead ? "head-commit-dot" : undefined}
         className={cn(
           "absolute rounded-full border-2",
-          latest && "animate-gd-pop",
+          fresh && "animate-gd-pop",
           isHead ? "border-accent bg-accent ring-4 ring-accent-soft" : "bg-panel",
         )}
         style={{
@@ -109,7 +113,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
         }}
         className={cn(
           "nopan flex cursor-pointer flex-col justify-center rounded-md border bg-panel px-3 text-left transition-colors duration-150",
-          latest && "animate-gd-pop",
+          fresh && "animate-gd-pop",
           selected ? "border-accent bg-accent-soft" : "border-border hover:border-border-strong",
         )}
       >
@@ -118,6 +122,7 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
         </span>
         <span className="block truncate text-small leading-tight text-fg">{commit.message}</span>
       </button>
+      {ghost ? <GhostCard ghost={ghost} left={railWidth} /> : null}
       <Handle
         type="source"
         position={Position.Bottom}
@@ -125,5 +130,43 @@ export function CommitNode({ data }: NodeProps<CommitFlowNode>) {
         style={handleStyle(dotX)}
       />
     </div>
+  );
+}
+
+/**
+ * The commit this one replaced (amend, rebase, squash), fading away beside it, or the original
+ * a cherry-pick copied, travelling over from its own row. Decorative: the text is drawn from
+ * data attributes, so it is never read out or matched as the commit's text.
+ */
+function GhostCard({
+  ghost,
+  left,
+}: {
+  ghost: NonNullable<CommitFlowNode["data"]["ghost"]>;
+  left: number;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="commit-ghost"
+      data-kind={ghost.kind}
+      data-oid={ghost.shortOid}
+      data-subject={ghost.subject}
+      className={cn(
+        "pointer-events-none absolute flex flex-col justify-center rounded-md border border-dashed border-border-strong bg-panel px-3",
+        "before:block before:font-mono before:text-caption before:leading-tight before:text-fg-muted before:content-[attr(data-oid)]",
+        "after:block after:truncate after:text-small after:leading-tight after:text-fg-muted after:content-[attr(data-subject)]",
+        ghost.kind === "replaced" ? "animate-gd-ghost-out before:line-through" : "animate-gd-copy",
+      )}
+      style={
+        {
+          left,
+          top: LABEL_ROW_HEIGHT,
+          width: COMMIT_CARD_WIDTH,
+          height: COMMIT_CARD_HEIGHT,
+          "--gd-from-y": `${String(ghost.fromY)}px`,
+        } as CSSProperties
+      }
+    />
   );
 }

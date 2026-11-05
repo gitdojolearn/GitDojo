@@ -25,4 +25,26 @@ describe("RefLabels", () => {
     render(<RefLabels branches={[]} tags={["v0.9"]} isHead={false} currentBranch="main" />);
     expect(screen.getByTestId("tag-label")).toHaveAttribute("data-tag", "v0.9");
   });
+
+  it("glides labels in from their old commit and pops in new ones", () => {
+    render(
+      <RefLabels
+        branches={["main", "feature"]}
+        tags={["v1.0"]}
+        isHead
+        currentBranch="main"
+        withTooltip={false}
+        motion={{ head: 76, "branch:feature": "new" }}
+      />,
+    );
+    const head = screen.getByTestId("head-label").parentElement;
+    // HEAD and its branch move as one label.
+    expect(head).toHaveClass("animate-gd-glide");
+    expect(head).toHaveStyle({ "--gd-from-y": "76px" });
+    const feature = screen
+      .getAllByTestId("branch-label")
+      .find((label) => label.getAttribute("data-branch") === "feature");
+    expect(feature).toHaveClass("animate-gd-pop");
+    expect(screen.getByTestId("tag-label")).not.toHaveClass("animate-gd-glide");
+  });
 });

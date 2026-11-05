@@ -56,7 +56,7 @@ export function CommandUsage({ summary }: { summary: CommandSummary }) {
                       >
                         <span
                           data-testid="command-bar"
-                          className="flex h-full overflow-hidden rounded-full bg-accent-strong/30 transition-[width] duration-500 ease-out"
+                          className="flex h-full origin-left animate-gd-fill overflow-hidden rounded-full bg-accent-strong/30 transition-[width] duration-500 ease-out"
                           style={{ width: `${String((command.uses / most) * 100)}%` }}
                         >
                           <span

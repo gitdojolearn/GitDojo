@@ -235,6 +235,22 @@
   --animate-gd-pulse-x: gd-pulse-x 1.6s ease-in-out infinite;
   /* A terminal cursor: blinks a few times, then stays solid (WCAG 2.2.2). */
   --animate-gd-blink: gd-blink 1.1s steps(1) 6 both;
+  /* Educational movement in the repository views. Offsets come from --gd-from-x / --gd-from-y. */
+  --animate-gd-glide: gd-glide 400ms ease-out both;
+  --animate-gd-draw: gd-draw 400ms ease-out both;
+  --animate-gd-ghost-out: gd-ghost-out 450ms ease-out 150ms both;
+  --animate-gd-copy: gd-copy 400ms ease-out both;
+  --animate-gd-move-in-reverse: gd-move-in-reverse 350ms ease-out both;
+  --animate-gd-rise: gd-rise 350ms ease-out both;
+  --animate-gd-leave-right: gd-leave-right 350ms ease-out both;
+  --animate-gd-leave-left: gd-leave-left 350ms ease-out both;
+  --animate-gd-leave-down: gd-leave-down 350ms ease-out both;
+  --animate-gd-leave-fade: gd-leave-fade 400ms ease-out both;
+  --animate-gd-travel-up: gd-travel-up 400ms ease-out both;
+  --animate-gd-travel-down: gd-travel-down 400ms ease-out both;
+  /* One short pulse, never a loop: it marks a change without demanding attention. */
+  --animate-gd-attention: gd-attention 600ms ease-out 1 both;
+  --animate-gd-fill: gd-fill 600ms ease-out both;
 }
 
 @keyframes gd-enter {
@@ -281,6 +297,134 @@
   50% {
     transform: translateX(4px);
     opacity: 1;
+  }
+}
+
+/* A label or card moving from where it was (a branch pointer moving to another commit). */
+@keyframes gd-glide {
+  from {
+    transform: translate(var(--gd-from-x, 0), var(--gd-from-y, 0));
+  }
+}
+
+/* A line drawing itself in; the path needs pathLength="1" and stroke-dasharray: 1. */
+@keyframes gd-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+/* A commit that history no longer contains, sliding away as its replacement arrives. */
+@keyframes gd-ghost-out {
+  from {
+    opacity: 0.7;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+
+/* A copy of a commit travelling from the original to where it is applied (cherry-pick). */
+@keyframes gd-copy {
+  from {
+    opacity: 0.7;
+    transform: translate(var(--gd-from-x, 0), var(--gd-from-y, 0));
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Files arriving from the panel to the right (repository → staging → working tree): undoing. */
+@keyframes gd-move-in-reverse {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+/* Files coming back out of the stash, which sits below the panels. */
+@keyframes gd-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Leaving rows collapse as they go, so the list closes up behind them. */
+@keyframes gd-leave-right {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+    max-height: 0;
+    padding-block: 0;
+  }
+}
+
+@keyframes gd-leave-left {
+  to {
+    opacity: 0;
+    transform: translateX(-16px);
+    max-height: 0;
+    padding-block: 0;
+  }
+}
+
+@keyframes gd-leave-down {
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+    max-height: 0;
+    padding-block: 0;
+  }
+}
+
+@keyframes gd-leave-fade {
+  to {
+    opacity: 0;
+    max-height: 0;
+    padding-block: 0;
+  }
+}
+
+@keyframes gd-travel-up {
+  from {
+    opacity: 1;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes gd-travel-down {
+  from {
+    opacity: 1;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes gd-attention {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--danger) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes gd-fill {
+  from {
+    transform: scaleX(0);
   }
 }
 

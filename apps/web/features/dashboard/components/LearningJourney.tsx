@@ -168,7 +168,7 @@ export function LearningJourney({
           className="mt-2 h-2 overflow-hidden rounded-full bg-border-strong"
         >
           <div
-            className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
+            className="h-full origin-left animate-gd-fill rounded-full bg-accent transition-[width] duration-500 ease-out"
             style={{ width: `${String(journey.percent)}%` }}
           />
         </div>
