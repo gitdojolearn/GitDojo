@@ -2084,6 +2084,34 @@ Do not animate everything.
 
 ---
 
+## How repository motion is wired
+
+Every animation of the repository views comes from one place:
+`features/repository/services/transitions.ts` compares the repository state before and after a
+command (`computeTransition`) and the store keeps the result next to the new state. Views read
+it, and only while it is recent (`isRecent`), so a remount later never replays it. A workspace's
+first state, and a reset to an unrelated history, have no transition and do not move.
+
+| What happened                                     | What moves                                                                               | Token                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------- |
+| A ref points at another commit (commit, switch…)  | Its label glides from the old commit's row (`HEAD → branch` moves as one)                 | `gd-glide`                         |
+| A ref is created                                  | Its label pops in                                                                          | `gd-pop`                           |
+| A commit is created                               | It pops in; its parent links draw themselves, a merge's second link just after           | `gd-pop`, `gd-draw`                |
+| A commit is rewritten (amend, rebase, squash)     | The old commit fades away beside its replacement, hash struck through                     | `gd-ghost-out`                     |
+| A commit is copied (cherry-pick)                  | A copy travels from the original's row                                                     | `gd-copy`                          |
+| Push / fetch                                      | `origin/*` glides; an arrow travels up (push) or down (fetch) in the remote list          | `gd-travel-up`, `gd-travel-down`   |
+| A file moves on (add, commit)                     | Leaves to the right, arrives from the left                                                 | `gd-leave-right`, `gd-move-in`     |
+| A file moves back (restore --staged, reset)       | Leaves to the left, arrives from the right                                                 | `gd-leave-left`, `gd-move-in-reverse` |
+| A change is discarded                             | Struck through, fades and collapses                                                        | `gd-leave-fade`                    |
+| Stash / stash pop                                 | Files drop into the stash, rise back out                                                   | `gd-leave-down`, `gd-rise`         |
+| A conflict appears / is resolved                  | One pulse on the file; a check beside it in Staging and in the banner                      | `gd-attention`, `gd-check`         |
+| Dashboard opens                                   | Stats count up (the real value stays in the DOM), bars and skill segments fill             | `useCountUp`, `gd-fill`            |
+
+Temporary elements (leaving rows, ghost commits) are `aria-hidden` and draw their text from data
+attributes with `content: attr(...)`, so screen readers, tests and text queries only ever see
+real files and commits. Everything is CSS, so the global `prefers-reduced-motion` rule turns it
+off; `useCountUp` checks the same media query.
+
 # 56. MICROINTERACTIONS
 
 Good examples:

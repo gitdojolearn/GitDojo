@@ -2,7 +2,16 @@
 
 import { cn } from "@gitdojo/ui";
 import { type RepositoryState } from "@gitdojo/shared-types";
-import { Archive, Cloud, Database, GitCommitHorizontal, Tag } from "lucide-react";
+import {
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  Cloud,
+  Database,
+  GitCommitHorizontal,
+  Tag,
+} from "lucide-react";
+import { isRecent } from "../services/transitions";
 import { useRepositoryStore } from "../state/use-repository-store";
 import { EmptyState } from "./EmptyState";
 import { FileAreaPanel } from "./FileAreaPanel";
@@ -123,7 +132,9 @@ function TagList({ tags }: { tags: RepositoryState["tags"] }) {
  * learner can see what a fetch or a push is about to move.
  */
 function RemoteList({ repository }: { repository: RepositoryState }) {
+  const transition = useRepositoryStore((state) => state.transition);
   if (repository.remotes.length === 0) return null;
+  const syncs = isRecent(transition) ? transition?.remoteSyncs : undefined;
   return (
     <section
       aria-label="Simulated remotes"
@@ -158,6 +169,7 @@ function RemoteList({ repository }: { repository: RepositoryState }) {
                   data-branch={branch.name}
                 >
                   <span className="shrink-0 font-mono text-caption text-branch">{branch.name}</span>
+                  <SyncArrow direction={syncs?.get(ref)} />
                   <span className="font-mono text-caption text-fg-muted">
                     {branch.oid.slice(0, 7)}
                   </span>
@@ -169,5 +181,25 @@ function RemoteList({ repository }: { repository: RepositoryState }) {
         </div>
       ))}
     </section>
+  );
+}
+
+/**
+ * Commits travelling for the latest push (up, to the server) or fetch (down, into `origin/*`).
+ * The status text next to it already says where things stand, so this is decoration.
+ */
+function SyncArrow({ direction }: { direction: "push" | "fetch" | undefined }) {
+  if (direction === undefined) return null;
+  const Icon = direction === "push" ? ArrowUp : ArrowDown;
+  return (
+    <Icon
+      aria-hidden="true"
+      data-testid="remote-sync"
+      data-direction={direction}
+      className={cn(
+        "size-3 shrink-0 self-center text-accent",
+        direction === "push" ? "animate-gd-travel-up" : "animate-gd-travel-down",
+      )}
+    />
   );
 }

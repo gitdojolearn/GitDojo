@@ -75,7 +75,7 @@ export function ConflictBanner({ className }: { className?: string }) {
         )}
       >
         {done ? (
-          <CircleCheck className="size-4" aria-hidden="true" />
+          <CircleCheck className="size-4 animate-gd-check" aria-hidden="true" />
         ) : (
           <TriangleAlert className="size-4" aria-hidden="true" />
         )}

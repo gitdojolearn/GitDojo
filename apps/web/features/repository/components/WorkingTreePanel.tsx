@@ -2,10 +2,11 @@
 
 import { Button } from "@gitdojo/ui";
 import { CircleCheck, FolderOpen } from "lucide-react";
+import { isRecent } from "../services/transitions";
 import { useRepositoryStore } from "../state/use-repository-store";
 import { EmptyState } from "./EmptyState";
 import { FileAreaPanel } from "./FileAreaPanel";
-import { FileRow } from "./FileRow";
+import { FileRow, LeavingFileRow } from "./FileRow";
 
 const UNSTAGED_STATUSES = new Set(["conflicted", "untracked", "modified", "deleted"]);
 
@@ -29,6 +30,17 @@ export function WorkingTreePanel({
 }: WorkingTreePanelProps) {
   const repository = useRepositoryStore((state) => state.repositoryState);
   const changed = repository.files.filter((file) => UNSTAGED_STATUSES.has(file.status));
+  const latest = useRepositoryStore((state) => state.transition);
+  const transition = isRecent(latest) ? latest : null;
+  const leaving = transition?.workingTreeLeaving ?? [];
+  const leavingRows =
+    leaving.length > 0 ? (
+      <ul aria-hidden="true">
+        {leaving.map(({ file, reason }) => (
+          <LeavingFileRow key={`${file.path}:${reason}`} file={file} reason={reason} />
+        ))}
+      </ul>
+    ) : null;
 
   return (
     <FileAreaPanel
@@ -40,34 +52,42 @@ export function WorkingTreePanel({
       className={className}
     >
       {changed.length === 0 ? (
-        <EmptyState icon={CircleCheck} title="No unstaged changes">
-          Your working tree matches the staging area.
-        </EmptyState>
+        <>
+          {leavingRows}
+          <EmptyState icon={CircleCheck} title="No unstaged changes">
+            Your working tree matches the staging area.
+          </EmptyState>
+        </>
       ) : (
-        <ul aria-label="Changed files">
-          {changed.map((file) => (
-            <FileRow
-              key={`${file.path}:${file.status}`}
-              file={file}
-              animation="enter"
-              onOpen={file.status === "deleted" ? undefined : onOpenFile}
-              action={
-                file.status === "conflicted" && onResolveConflict ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-danger"
-                    onClick={() => {
-                      onResolveConflict(file.path);
-                    }}
-                  >
-                    Resolve
-                  </Button>
-                ) : undefined
-              }
-            />
-          ))}
-        </ul>
+        <>
+          <ul aria-label="Changed files">
+            {changed.map((file) => (
+              <FileRow
+                key={`${file.path}:${file.status}`}
+                file={file}
+                animation="enter"
+                arrival={transition?.workingTreeArrivals.get(file.path)}
+                attention={transition?.newConflicts.has(file.path) ?? false}
+                onOpen={file.status === "deleted" ? undefined : onOpenFile}
+                action={
+                  file.status === "conflicted" && onResolveConflict ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-danger"
+                      onClick={() => {
+                        onResolveConflict(file.path);
+                      }}
+                    >
+                      Resolve
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ))}
+          </ul>
+          {leavingRows}
+        </>
       )}
     </FileAreaPanel>
   );

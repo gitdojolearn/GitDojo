@@ -48,14 +48,17 @@ describe("buildCommitGraph", () => {
       currentBranch: "main",
       branches: ["main"],
       selected: false,
-      latest: true,
+      // Still: without a transition, nothing animates in.
+      fresh: false,
+      refMotion: {},
+      ghost: null,
       lane: 0,
     });
     expect(nodes[1]?.data).toMatchObject({
       isHead: false,
       branches: [],
       selected: true,
-      latest: false,
+      fresh: false,
       lane: 0,
     });
     expect(edges).toEqual([

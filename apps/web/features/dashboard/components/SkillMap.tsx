@@ -175,13 +175,15 @@ function SkillCard({ entry, action }: { entry: SkillProgress; action?: SkillActi
             <span
               key={index}
               className={cn(
-                "h-full flex-1 rounded-full transition-colors duration-300 ease-out",
+                "h-full flex-1 origin-left rounded-full transition-colors duration-300 ease-out",
                 index < towardsMastery
-                  ? entry.status === "mastered"
-                    ? "bg-success"
-                    : "bg-accent"
+                  ? cn("animate-gd-fill", entry.status === "mastered" ? "bg-success" : "bg-accent")
                   : "bg-border-strong",
               )}
+              // Filled segments fill one after another.
+              style={
+                index < towardsMastery ? { animationDelay: `${String(index * 120)}ms` } : undefined
+              }
             />
           ))}
         </span>

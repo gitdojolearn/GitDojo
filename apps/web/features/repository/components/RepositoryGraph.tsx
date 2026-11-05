@@ -8,6 +8,7 @@ import { FolderGit2, GitBranch } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "@/features/theme";
 import { buildCommitGraph } from "../services/build-commit-graph";
+import { isRecent } from "../services/transitions";
 import { useRepositoryStore } from "../state/use-repository-store";
 import { CommitDetails } from "./CommitDetails";
 import { CommitNode } from "./CommitNode";
@@ -81,7 +82,13 @@ export function RepositoryGraph() {
   const repository = useRepositoryStore((state) => state.repositoryState);
   const selectedOid = useRepositoryStore((state) => state.selectedCommit);
   const selectCommit = useRepositoryStore((state) => state.selectCommit);
-  const graph = useMemo(() => buildCommitGraph(repository, selectedOid), [repository, selectedOid]);
+  const transition = useRepositoryStore((state) => state.transition);
+  // Only a command that just ran animates: re-rendering later (selecting a commit remounts the
+  // canvas) shows the graph still.
+  const graph = useMemo(
+    () => buildCommitGraph(repository, selectedOid, isRecent(transition) ? transition : null),
+    [repository, selectedOid, transition],
+  );
   const selected = repository.allCommits.find((commit) => commit.oid === selectedOid);
   const [canvasRef, visible] = useHasSize<HTMLDivElement>();
   const theme = useTheme();

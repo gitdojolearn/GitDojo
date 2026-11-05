@@ -1,10 +1,11 @@
 "use client";
 
 import { Inbox, Layers } from "lucide-react";
+import { isRecent } from "../services/transitions";
 import { useRepositoryStore } from "../state/use-repository-store";
 import { EmptyState } from "./EmptyState";
 import { FileAreaPanel } from "./FileAreaPanel";
-import { FileRow } from "./FileRow";
+import { FileRow, LeavingFileRow } from "./FileRow";
 
 export interface StagingAreaPanelProps {
   className?: string;
@@ -14,6 +15,17 @@ export interface StagingAreaPanelProps {
 
 export function StagingAreaPanel({ className, onOpenFile }: StagingAreaPanelProps) {
   const staged = useRepositoryStore((state) => state.repositoryState.stagedFiles);
+  const latest = useRepositoryStore((state) => state.transition);
+  const transition = isRecent(latest) ? latest : null;
+  const leaving = transition?.stagingLeaving ?? [];
+  const leavingRows =
+    leaving.length > 0 ? (
+      <ul aria-hidden="true">
+        {leaving.map(({ file, reason }) => (
+          <LeavingFileRow key={`${file.path}:${reason}`} file={file} reason={reason} />
+        ))}
+      </ul>
+    ) : null;
 
   return (
     <FileAreaPanel
@@ -25,20 +37,28 @@ export function StagingAreaPanel({ className, onOpenFile }: StagingAreaPanelProp
       className={className}
     >
       {staged.length === 0 ? (
-        <EmptyState icon={Inbox} title="No staged changes">
-          Use <code className="gd-code">git add</code> to prepare files for your next commit.
-        </EmptyState>
+        <>
+          {leavingRows}
+          <EmptyState icon={Inbox} title="No staged changes">
+            Use <code className="gd-code">git add</code> to prepare files for your next commit.
+          </EmptyState>
+        </>
       ) : (
-        <ul aria-label="Staged files">
-          {staged.map((file) => (
-            <FileRow
-              key={`${file.path}:${file.change ?? ""}`}
-              file={file}
-              animation="move-in"
-              onOpen={file.change === "deleted" ? undefined : onOpenFile}
-            />
-          ))}
-        </ul>
+        <>
+          <ul aria-label="Staged files">
+            {staged.map((file) => (
+              <FileRow
+                key={`${file.path}:${file.change ?? ""}`}
+                file={file}
+                animation="move-in"
+                arrival={transition?.stagingArrivals.get(file.path)}
+                resolved={transition?.resolvedConflicts.has(file.path) ?? false}
+                onOpen={file.change === "deleted" ? undefined : onOpenFile}
+              />
+            ))}
+          </ul>
+          {leavingRows}
+        </>
       )}
     </FileAreaPanel>
   );
