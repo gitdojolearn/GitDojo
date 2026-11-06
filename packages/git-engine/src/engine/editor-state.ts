@@ -37,10 +37,17 @@ export interface RebaseEditorRecord extends EditorRecordBase {
   reason?: "reword" | "squash";
 }
 
-/** `git commit --amend` without `-m`: waiting for the amended commit's message. Nothing changed. */
+/**
+ * `git commit` (or `git commit --amend`) without `-m`: waiting for the commit's message. Nothing
+ * has changed yet, not even what `-a` will stage.
+ */
 export interface CommitEditorRecord extends EditorRecordBase {
   kind: "commit";
   purpose: "message";
+  /** `false` for a new commit. Records written before plain `git commit` opened one are amends. */
+  amend?: boolean;
+  /** `-a`: stage changes to tracked files when the message is saved. */
+  all?: boolean;
   /** `--reset-author`: the amended commit is by the learner. */
   resetAuthor?: boolean;
 }

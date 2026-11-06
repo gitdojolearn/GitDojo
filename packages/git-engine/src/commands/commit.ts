@@ -2,6 +2,7 @@ import git from "isomorphic-git";
 import { type GitContext } from "../engine/context";
 import { WAITING_FOR_EDITOR, writeEditorRecord } from "../engine/editor-state";
 import { failure, gitError, notARepository, success } from "../engine/errors";
+import { type GitStatusData, type GitStatusEntry } from "../engine/git-engine";
 import { learnerIdentity } from "../engine/config";
 import { type GitCommitInput, type GitCommitResult } from "../engine/git-engine";
 import {
@@ -20,6 +21,7 @@ import {
   subject,
 } from "../engine/repository";
 import { hasStagedChanges } from "../engine/status-matrix";
+import { runAdd } from "./add";
 import { formatStatus, readStatusData } from "./status";
 
 export const COMMIT_MESSAGE_REQUIRED = "error: commit message is required";
@@ -31,20 +33,88 @@ export const UNRESOLVED_CONFLICTS_MESSAGE = [
   "fatal: Exiting because of an unresolved conflict.",
 ].join("\n");
 
+const EDITOR_HELP = [
+  "# Please enter the commit message for your changes. Lines starting",
+  "# with '#' will be ignored, and an empty message aborts the commit.",
+  "#",
+];
+
+/** Tracked files whose changes `git commit -a` stages: edits and deletions, never new files. */
+function trackedChanges(entries: readonly GitStatusEntry[]): GitStatusEntry[] {
+  return entries.filter((entry) => entry.unstaged === "modified" || entry.unstaged === "deleted");
+}
+
+const LABELS = { added: "new file", modified: "modified", deleted: "deleted" } as const;
+
+function commented(label: string, path: string): string {
+  return `#\t${`${label}:`.padEnd(12)}${path}`;
+}
+
+/**
+ * What Git puts in COMMIT_EDITMSG for a new commit: an empty first line for the message, its
+ * help text, then the status as comments (with `-a`, tracked changes count as staged).
+ */
+function newCommitTemplate(status: GitStatusData, all: boolean): string {
+  const tracked = new Set(all ? trackedChanges(status.entries).map((entry) => entry.path) : []);
+  const staged = status.entries.flatMap((entry) => {
+    const change = entry.staged ?? (tracked.has(entry.path) ? entry.unstaged : null);
+    return change === null || change === "untracked" ? [] : [commented(LABELS[change], entry.path)];
+  });
+  const unstaged = trackedChanges(status.entries)
+    .filter((entry) => !tracked.has(entry.path))
+    .map((entry) =>
+      commented(LABELS[entry.unstaged === "deleted" ? "deleted" : "modified"], entry.path),
+    );
+  const untracked = status.entries
+    .filter((entry) => entry.unstaged === "untracked")
+    .map((entry) => `#\t${entry.path}`);
+  const where =
+    status.branch === null && status.head !== null
+      ? `# HEAD detached at ${shortOid(status.head)}`
+      : `# On branch ${status.branch ?? "HEAD"}`;
+  const section = (title: string, lines: string[]) =>
+    lines.length === 0 ? [] : [`# ${title}:`, ...lines, "#"];
+  return [
+    "",
+    ...EDITOR_HELP,
+    where,
+    ...(status.hasCommits ? [] : ["#", "# Initial commit", "#"]),
+    ...section("Changes to be committed", staged),
+    ...section("Changes not staged for commit", unstaged),
+    ...section("Untracked files", untracked),
+    "",
+  ].join("\n");
+}
+
+/** `git commit` without `-m`: Git opens the editor and waits. Nothing is staged or made yet. */
+async function openCommitEditor(
+  ctx: GitContext,
+  status: GitStatusData,
+  all: boolean,
+): Promise<GitCommitResult> {
+  await writeEditorRecord(ctx, {
+    kind: "commit",
+    purpose: "message",
+    file: "COMMIT_EDITMSG",
+    content: newCommitTemplate(status, all),
+    amend: false,
+    ...(all ? { all } : {}),
+  });
+  return { ok: true, output: WAITING_FOR_EDITOR };
+}
+
 /** What Git puts in COMMIT_EDITMSG when amending: the current message, then its help text. */
 async function openAmendEditor(
   ctx: GitContext,
   head: string,
-  resetAuthor: boolean,
+  { resetAuthor, all }: { resetAuthor: boolean; all: boolean },
 ): Promise<GitCommitResult> {
   const { commit } = await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid: head });
   const branch = await currentBranch(ctx);
   const content = [
     commit.message.trimEnd(),
     "",
-    "# Please enter the commit message for your changes. Lines starting",
-    "# with '#' will be ignored, and an empty message aborts the commit.",
-    "#",
+    ...EDITOR_HELP,
     branch === null ? `# HEAD detached at ${shortOid(head)}` : `# On branch ${branch}`,
     "",
   ].join("\n");
@@ -54,6 +124,7 @@ async function openAmendEditor(
     file: "COMMIT_EDITMSG",
     content,
     ...(resetAuthor ? { resetAuthor } : {}),
+    ...(all ? { all } : {}),
   });
   return { ok: true, output: WAITING_FOR_EDITOR };
 }
@@ -86,10 +157,23 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
   }
   // `git commit --amend` without a message opens the editor on the commit's current one.
   if (input.amend && amendHead !== null && !input.noEdit && input.message.trim() === "") {
-    return openAmendEditor(ctx, amendHead, input.resetAuthor === true);
+    return openAmendEditor(ctx, amendHead, {
+      resetAuthor: input.resetAuthor === true,
+      all: input.all === true,
+    });
   }
   // A rebase step that was already committed has nothing left for `git commit` to conclude.
   const concluding = merge !== null && !(operation === "rebase" && merge.rebase?.current === null);
+  // `git commit` with no `-m` at all opens the editor, once there is something to commit.
+  // (`-m "  "` is a message the learner typed, and is refused below.)
+  if (!input.amend && !concluding && input.message === "") {
+    const before = await readStatusData(ctx);
+    const pending =
+      hasStagedChanges(before.entries) ||
+      (input.all === true && trackedChanges(before.entries).length > 0);
+    if (pending) return openCommitEditor(ctx, before, input.all === true);
+    return failure(gitError("NOTHING_TO_COMMIT", "nothing to commit"), formatStatus(before));
+  }
   // Concluding an operation may use its prepared message, like `git commit --no-edit`.
   const message =
     input.message.trim() ||
@@ -104,6 +188,18 @@ export async function runCommit(ctx: GitContext, input: GitCommitInput): Promise
     return failure(gitError("INVALID_ARGUMENT", COMMIT_MESSAGE_REQUIRED));
   }
 
+  if (input.all) {
+    const tracked = trackedChanges((await readStatusData(ctx)).entries).map((entry) => entry.path);
+    if (tracked.length > 0) {
+      const staged = await runAdd(ctx, tracked);
+      if (!staged.ok)
+        return {
+          ok: false,
+          output: staged.output,
+          ...(staged.error ? { error: staged.error } : {}),
+        };
+    }
+  }
   const status = await readStatusData(ctx);
   // A merge commit may record no changes of its own (e.g. every conflict resolved to our version).
   if (operation !== "merge" && !input.amend && !hasStagedChanges(status.entries)) {

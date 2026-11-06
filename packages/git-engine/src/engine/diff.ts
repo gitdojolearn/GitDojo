@@ -130,8 +130,13 @@ export function formatFileDiff(diff: GitFileDiff, oids: { before: string; after:
  *    login.js | 5 +++++
  *    1 file changed, 5 insertions(+)
  *    create mode 100644 login.js
+ *
+ * `modes: false` leaves out the create/delete mode lines, as `git log --stat` does.
  */
-export function formatDiffStat(changes: readonly FileChange[]): string[] {
+export function formatDiffStat(
+  changes: readonly FileChange[],
+  { modes = true }: { modes?: boolean } = {},
+): string[] {
   if (changes.length === 0) return [];
   const rows = changes.map((change) => ({
     path: change.path,
@@ -145,7 +150,7 @@ export function formatDiffStat(changes: readonly FileChange[]): string[] {
     ...rows.map((row) =>
       ` ${row.path.padEnd(nameWidth)} | ${String(row.insertions + row.deletions).padStart(countWidth)} ${bar(row.insertions, "+")}${bar(row.deletions, "-")}`.trimEnd(),
     ),
-    ...formatChangeSummary(changes),
+    ...formatChangeSummary(changes).slice(0, modes ? undefined : 1),
   ];
 }
 

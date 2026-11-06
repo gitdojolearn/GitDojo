@@ -5,18 +5,22 @@ import { failure, gitError, notARepository, success } from "../engine/errors";
 import {
   type GitBranchCreateResult,
   type GitBranchDeleteResult,
+  type GitBranchRenameOptions,
+  type GitBranchRenameResult,
   type GitBranchListResult,
   type GitShowBranchesOptions,
   type GitUpstreamInfo,
 } from "../engine/git-engine";
+import { readMergeState } from "../engine/merge-state";
 import {
   clearUpstreamConfig,
   readRemoteTrackingBranches,
+  readUpstreamConfig,
   resolveCommitRef,
   upstreamInfo,
   writeUpstreamConfig,
 } from "../engine/refs";
-import { deleteReflog, logBranchMove } from "../engine/reflog";
+import { deleteReflog, logBranchMove, renameReflog } from "../engine/reflog";
 import {
   createCommitCache,
   currentBranch,
@@ -236,4 +240,93 @@ export async function runDeleteBranch(
   await deleteReflog(ctx, name);
   await clearUpstreamConfig(ctx, name);
   return success(`Deleted branch ${name} (was ${shortOid(oid)}).`, { name, oid });
+}
+
+/**
+ * `git branch -m [<old>] <new>`: renames a branch, the current one by default. `-M` (`force`)
+ * replaces a branch that already has the new name. The reflog and upstream move with it, and an
+ * unborn branch can be renamed too: that is how `git branch -M main` fixes a fresh repository.
+ */
+export async function runRenameBranch(
+  ctx: GitContext,
+  name: string,
+  { from, force = false }: GitBranchRenameOptions = {},
+): Promise<GitBranchRenameResult> {
+  if (!(await isRepository(ctx))) return notARepository();
+  const current = await currentBranch(ctx);
+  const old = from ?? current;
+  if (old === null) {
+    return failure(
+      gitError("NOT_ON_BRANCH", "fatal: cannot rename the current branch while not on any"),
+    );
+  }
+  const oid = isValidBranchName(old) ? await resolveRefOrNull(ctx, `refs/heads/${old}`) : null;
+  // Only the current branch can exist without a commit (it is unborn).
+  if (oid === null && old !== current) {
+    return failure(gitError("BRANCH_NOT_FOUND", `fatal: no branch named '${old}'`));
+  }
+  // Renaming to the same name changes nothing, so `git branch -M main` on main just works.
+  if (name === old) return success("", { from: old, to: name, oid });
+  if (!isValidBranchName(name)) {
+    return failure(gitError("INVALID_BRANCH_NAME", `fatal: '${name}' is not a valid branch name`));
+  }
+  const existing = await git.listBranches({ fs: ctx.fs, dir: ctx.dir });
+  if (existing.includes(name)) {
+    if (!force) {
+      return failure(gitError("BRANCH_EXISTS", `fatal: a branch named '${name}' already exists`));
+    }
+    if (name === current) {
+      return failure(
+        gitError(
+          "BRANCH_CHECKED_OUT",
+          `fatal: cannot force update the branch '${name}' used by worktree at '${ctx.displayDir}'`,
+        ),
+      );
+    }
+  }
+  // Branches are files under .git/refs/heads, so `feature` and `feature/login` cannot coexist.
+  const clash = existing.find(
+    (branch) => branch !== name && (branch.startsWith(`${name}/`) || name.startsWith(`${branch}/`)),
+  );
+  if (clash !== undefined) {
+    return failure(
+      gitError(
+        "BRANCH_EXISTS",
+        `error: 'refs/heads/${clash}' exists; cannot create 'refs/heads/${name}'\nfatal: branch rename failed`,
+      ),
+    );
+  }
+  const rebase = (await readMergeState(ctx))?.rebase;
+  if (rebase?.branch === old) {
+    return failure(
+      gitError("OPERATION_IN_PROGRESS", `fatal: branch '${old}' is being rebased; finish it first`),
+    );
+  }
+
+  const upstream = await readUpstreamConfig(ctx, old);
+  if (oid !== null) {
+    if (existing.includes(name)) {
+      await git.deleteBranch({ fs: ctx.fs, dir: ctx.dir, ref: name });
+      await clearUpstreamConfig(ctx, name);
+    }
+    await git.writeRef({ fs: ctx.fs, dir: ctx.dir, ref: `refs/heads/${name}`, value: oid });
+    await git.deleteRef({ fs: ctx.fs, dir: ctx.dir, ref: `refs/heads/${old}` });
+    await renameReflog(ctx, old, name, { oid, onHead: old === current });
+  }
+  if (old === current) {
+    await git.writeRef({
+      fs: ctx.fs,
+      dir: ctx.dir,
+      ref: "HEAD",
+      value: `refs/heads/${name}`,
+      symbolic: true,
+      force: true,
+    });
+  }
+  if (upstream) {
+    await clearUpstreamConfig(ctx, old);
+    await writeUpstreamConfig(ctx, name, upstream.remote, upstream.branch);
+  }
+  // Real `git branch -m` is silent on success.
+  return success("", { from: old, to: name, oid });
 }

@@ -17,7 +17,7 @@ import {
 import { parseCommand, notAGitCommandMessage } from "../parser";
 import { tokenize } from "../tokenizer";
 import { type ParsedCommand } from "../types";
-import { helpText } from "./help";
+import { commandHelpText, helpText } from "./help";
 import { type CommandExecutionContext, type CommandExecutionResult } from "./types";
 
 type GitHandler = (
@@ -76,13 +76,22 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
       amend,
       noEdit: parsed.flags["no-edit"] === true,
       resetAuthor: parsed.flags["reset-author"] === true,
+      ...(parsed.flags.a === true ? { all: true } : {}),
     });
   },
   log: (parsed, { git }) => {
     const [revision] = parsed.args;
+    const count = parsed.flags.n;
+    if (typeof count === "string" && !/^\d+$/.test(count)) {
+      return invalidArgument(`fatal: '${count}': not an integer`);
+    }
     return git.log({
       oneline: parsed.flags.oneline === true,
       all: parsed.flags.all === true,
+      graph: parsed.flags.graph === true,
+      stat: parsed.flags.stat === true,
+      patch: parsed.flags.p === true,
+      ...(typeof count === "string" ? { maxCount: Number(count) } : {}),
       ...(revision === undefined ? {} : { revision }),
     });
   },
@@ -92,6 +101,19 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
     const [name, startPoint] = parsed.args;
     const remove = parsed.flags.d === true || parsed.flags.D === true;
     const listing = parsed.flags.r === true || parsed.flags.a === true || parsed.flags.v === true;
+    if (parsed.flags.m === true || parsed.flags.M === true) {
+      if (listing || remove) {
+        return invalidArgument(
+          "fatal: GitDojo renames branches separately from listing or deleting them",
+        );
+      }
+      if (name === undefined) return invalidArgument("fatal: branch name required");
+      // `git branch -m <new>` renames the current branch; `git branch -m <old> <new>` another one.
+      return git.renameBranch(startPoint ?? name, {
+        ...(startPoint === undefined ? {} : { from: name }),
+        force: parsed.flags.M === true,
+      });
+    }
     if (listing) {
       if (name !== undefined || remove) {
         return invalidArgument(
@@ -140,7 +162,15 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
       fastForwardOnly: parsed.flags["ff-only"] === true,
     });
   },
-  diff: (parsed, { git }) => git.diff({ staged: parsed.flags.staged === true, paths: parsed.args }),
+  diff: (parsed, { git }) => {
+    // Words before `--` may name commits; the engine tells them from paths, as Git does.
+    const split = parsed.pathsFrom ?? parsed.args.length;
+    return git.diff({
+      staged: parsed.flags.staged === true,
+      revisions: parsed.args.slice(0, split),
+      paths: parsed.args.slice(split),
+    });
+  },
   restore: (parsed, { git }) => {
     const source = parsed.flags.source;
     return git.restore(parsed.args, {
@@ -339,11 +369,32 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
   // Kept for comparison with older tutorials: switching branches and visiting commits.
   checkout: async (parsed, { git }) => {
     const create = parsed.flags.b;
-    const [name] = parsed.args;
-    if (typeof create === "string") return git.createAndSwitchBranch(create, name);
+    const split = parsed.pathsFrom ?? parsed.args.length;
+    const before = parsed.args.slice(0, split);
+    const paths = parsed.args.slice(split);
+    const usage = `usage: ${GIT_COMMAND_SPECS.checkout.usage}`;
+    if (typeof create === "string") {
+      if (before.length > 1 || paths.length > 0) return invalidArgument(usage);
+      return git.createAndSwitchBranch(create, before[0]);
+    }
+    // `git checkout [<commit>] -- <path>...`: files, never a branch.
+    if (paths.length > 0) {
+      if (before.length > 1) {
+        return invalidArgument(
+          `fatal: GitDojo checks out files from one commit at a time\n${usage}`,
+        );
+      }
+      const [source] = before;
+      return git.checkoutFiles({ paths, separated: true, ...(source ? { source } : {}) });
+    }
+    // Several words without `--`: paths, after a commit if the first word names one.
+    if (before.length > 1) return git.checkoutFiles({ paths: before, separated: false });
+    const [name] = before;
     if (name === undefined) {
+      // `git checkout --` with nothing after it does nothing, like Git.
+      if (parsed.pathsFrom !== undefined) return { ok: true, output: "" };
       return invalidArgument(
-        "fatal: GitDojo needs a branch or commit to check out\nusage: git checkout [-b <new-branch>] <branch | commit>",
+        `fatal: GitDojo needs a branch, commit or file to check out\n${usage}`,
       );
     }
     const isBranch = (await git.listBranches()).some(
@@ -353,6 +404,11 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
     // Anything else that names a commit detaches HEAD there, with Git's long advice.
     const result = await git.detachHead(name, { advice: true });
     if (result.error?.code !== "INVALID_REVISION") return result;
+    // Not a branch or commit: a file to put back, as in `git checkout README.md`.
+    if (parsed.pathsFrom === undefined) {
+      const restored = await git.checkoutFiles({ paths: [name], separated: false });
+      if (restored.ok) return restored;
+    }
     // `git checkout` also restores files, so Git reports an unknown name as a pathspec. The
     // learner almost always meant a branch, so that is the error code kept for explanations.
     const message = `error: pathspec '${name}' did not match any file(s) known to git`;
@@ -409,6 +465,9 @@ async function dispatch(
       errorCode: "UNSUPPORTED_GIT_COMMAND",
     };
   }
+
+  // `-h` only shows the usage: nothing ran, so it is not counted as using the command.
+  if (parsed.help) return { ok: true, output: commandHelpText(GIT_COMMAND_SPECS[command]) };
 
   return { ...fromGitResult(await gitHandlers[command](parsed, context)), gitCommand: command };
 }

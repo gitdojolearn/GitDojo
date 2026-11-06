@@ -118,6 +118,41 @@ export async function deleteReflog(ctx: GitContext, branch: string): Promise<voi
   }
 }
 
+/**
+ * Moves a branch's log to its new name, as `git branch -m` does, then records the rename in it
+ * (and in HEAD's log when HEAD is on the branch). A log already under the new name is replaced.
+ */
+export async function renameReflog(
+  ctx: GitContext,
+  from: string,
+  to: string,
+  { oid, onHead }: { oid: string; onHead: boolean },
+): Promise<void> {
+  const source = logPath(ctx, `refs/heads/${from}`);
+  let existing: string | null = null;
+  try {
+    const raw = await ctx.fs.promises.readFile(source, { encoding: "utf8" });
+    existing = typeof raw === "string" ? raw : new TextDecoder().decode(raw);
+    await ctx.fs.promises.unlink(source);
+  } catch (error) {
+    if (!hasErrorCode(error, "ENOENT")) throw error;
+  }
+  await deleteReflog(ctx, to);
+  if (existing !== null) {
+    const target = logPath(ctx, `refs/heads/${to}`);
+    await ensureDirectory(ctx.fs.promises, target.slice(0, target.lastIndexOf("/")));
+    await ctx.fs.promises.writeFile(target, existing, "utf8");
+  }
+  const record: ReflogRecord = {
+    oldOid: oid,
+    newOid: oid,
+    timestamp: Math.floor(Date.now() / 1000),
+    message: `Branch: renamed refs/heads/${from} to refs/heads/${to}`,
+  };
+  await append(ctx, `refs/heads/${to}`, record);
+  if (onHead) await append(ctx, "HEAD", record);
+}
+
 /** `HEAD@{n}` / `main@{n}`: where the ref was n moves ago. */
 export async function reflogEntry(
   ctx: GitContext,

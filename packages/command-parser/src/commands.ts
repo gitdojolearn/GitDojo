@@ -25,11 +25,12 @@ export const GIT_COMMAND_SPECS = {
   },
   commit: {
     name: "commit",
-    summary: "Record staged changes (--amend: replace the latest commit)",
-    usage: 'git commit [-m "<message>"] [--amend [--no-edit] [--reset-author]]',
-    // `-m` is checked by the engine: while concluding a merge, `git commit` alone is enough.
+    summary: "Record staged changes (-a: all tracked changes; --amend: replace the latest commit)",
+    usage: 'git commit [-a] [-m "<message>"] [--amend [--no-edit] [--reset-author]]',
+    // Without `-m`, the engine opens the editor (or uses a merge's prepared message).
     flags: [
       { name: "m", aliases: ["message"], takesValue: true, repeatSeparator: "\n\n" },
+      { name: "a", aliases: ["all"], takesValue: false },
       { name: "amend", takesValue: false },
       { name: "no-edit", takesValue: false },
       { name: "reset-author", takesValue: false },
@@ -38,14 +39,20 @@ export const GIT_COMMAND_SPECS = {
   },
   log: {
     name: "log",
-    summary: "Show commit history (of HEAD, a branch, or --all)",
-    usage: "git log [--oneline] [--all] [<branch>]",
+    summary: "Show commit history (of HEAD, a branch, or --all; --graph draws branches)",
+    usage:
+      "git log [--oneline] [--graph] [--all] [-n <number> | -<number>] [--stat | -p] [<branch>]",
     flags: [
       { name: "oneline", takesValue: false },
       { name: "all", takesValue: false },
+      { name: "graph", takesValue: false },
+      { name: "n", aliases: ["max-count"], takesValue: true },
+      { name: "stat", takesValue: false },
+      { name: "p", aliases: ["patch", "u"], takesValue: false },
     ],
     acceptsArguments: true,
     maxArguments: 1,
+    countFlag: "n",
   },
   show: {
     name: "show",
@@ -64,11 +71,13 @@ export const GIT_COMMAND_SPECS = {
   },
   branch: {
     name: "branch",
-    summary: "List (-r remote, -a all, -v details), create or delete branches",
-    usage: "git branch [-r | -a] [-v] [-d | -D] [<name> [<start-point>]]",
+    summary: "List (-r remote, -a all, -v details), create, rename (-m) or delete branches",
+    usage: "git branch [-r | -a] [-v] [-d | -D] [-m | -M] [<name> [<start-point> | <new-name>]]",
     flags: [
       { name: "d", aliases: ["delete"], takesValue: false },
       { name: "D", takesValue: false },
+      { name: "m", aliases: ["move"], takesValue: false },
+      { name: "M", takesValue: false },
       { name: "r", aliases: ["remotes"], takesValue: false },
       { name: "a", aliases: ["all"], takesValue: false },
       // `-vv` is two of these; GitDojo shows the upstream for either.
@@ -90,11 +99,12 @@ export const GIT_COMMAND_SPECS = {
   },
   checkout: {
     name: "checkout",
-    summary: "Older way to switch branches or visit a commit (prefer git switch)",
-    usage: "git checkout [-b <new-branch>] <branch | commit>",
+    summary:
+      "Older way to switch branches, visit a commit or restore files (prefer switch/restore)",
+    usage:
+      "git checkout [-b <new-branch>] <branch | commit> | git checkout [<commit>] -- <path>...",
     flags: [{ name: "b", takesValue: true }],
     acceptsArguments: true,
-    maxArguments: 1,
   },
   merge: {
     name: "merge",
@@ -110,8 +120,8 @@ export const GIT_COMMAND_SPECS = {
   },
   diff: {
     name: "diff",
-    summary: "Show unstaged changes (--staged: staged ones)",
-    usage: "git diff [--staged] [<path>...]",
+    summary: "Show unstaged changes (--staged: staged ones), or compare commits",
+    usage: "git diff [--staged] [<commit> [<commit>] | <commit>..<commit>] [--] [<path>...]",
     flags: [{ name: "staged", aliases: ["cached"], takesValue: false }],
     acceptsArguments: true,
   },
