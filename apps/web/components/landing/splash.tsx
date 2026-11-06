@@ -5,7 +5,7 @@ import { SplashController } from "./splash-controller";
 import "./splash.css";
 
 /*
- * The first-visit intro: a commit appears, a branch grows and merges, and the graph resolves into
+ * The landing-page intro: a commit appears, a branch grows and merges, and the graph resolves into
  * the GitDojo mark before the hero is revealed. Everything is drawn here, on the server, in the
  * mark's own 512-unit space, so each commit can travel exactly onto one of the mark's nodes.
  * Timing lives in splash.css; SplashController only handles skipping and cleanup.
@@ -128,8 +128,8 @@ export function Splash() {
       <div className="gd-splash-scene" aria-hidden="true">
         <div className="gd-splash-stage">
           <div className="gd-splash-floor" />
-          {/* Lazy: hidden (display: none) for everyone but first-time visitors, who fetch it at
-              first paint, well before the graph resolves into it. */}
+          {/* Lazy: hidden (display: none) unless the splash is active, then fetched before the
+              graph resolves into it. */}
           <Image
             src={mark}
             alt=""

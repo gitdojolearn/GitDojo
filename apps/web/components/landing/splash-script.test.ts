@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SPLASH_ATTRIBUTE, SPLASH_SCRIPT, SPLASH_SEEN_KEY } from "./splash-script";
+import { SPLASH_ATTRIBUTE, SPLASH_SCRIPT } from "./splash-script";
 
 let reducedMotion = false;
 
@@ -13,7 +13,6 @@ function run(url: string) {
 
 beforeEach(() => {
   reducedMotion = false;
-  localStorage.clear();
   document.documentElement.removeAttribute(SPLASH_ATTRIBUTE);
   vi.stubGlobal(
     "matchMedia",
@@ -26,11 +25,10 @@ afterEach(() => {
 });
 
 describe("SPLASH_SCRIPT", () => {
-  it("plays the intro on a first visit to the landing page, once", () => {
+  it("plays the intro on every landing-page visit", () => {
     expect(run("/")).toBe("play");
-    expect(localStorage.getItem(SPLASH_SEEN_KEY)).toBe("1");
     document.documentElement.removeAttribute(SPLASH_ATTRIBUTE);
-    expect(run("/")).toBeNull();
+    expect(run("/")).toBe("play");
   });
 
   it("shows the static version with reduced motion", () => {
@@ -38,17 +36,16 @@ describe("SPLASH_SCRIPT", () => {
     expect(run("/")).toBe("static");
   });
 
-  it("never shows on a deep link, and doesn't use up the first visit", () => {
+  it("never shows on a deep link", () => {
     expect(run("/learn")).toBeNull();
     expect(run("/#courses")).toBeNull();
-    expect(localStorage.getItem(SPLASH_SEEN_KEY)).toBeNull();
   });
 
-  it("opens the page directly when storage is unavailable", () => {
+  it("plays even when storage is unavailable", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    expect(run("/")).toBeNull();
+    expect(run("/")).toBe("play");
     vi.restoreAllMocks();
   });
 });
