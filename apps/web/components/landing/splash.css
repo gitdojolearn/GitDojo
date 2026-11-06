@@ -1,5 +1,5 @@
 /*
- * Landing-page intro (splash.tsx). Hidden unless SPLASH_SCRIPT put data-splash on <html> before
+ * First-visit intro (splash.tsx). Hidden unless SPLASH_SCRIPT put data-splash on <html> before
  * the first paint. Without any animation the overlay shows its finished frame (the mark and the
  * wordmark): that is the reduced-motion ("static") version. "play" adds the sequence below.
  *

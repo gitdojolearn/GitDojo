@@ -101,7 +101,6 @@ test("reset restores the original lesson state", async ({ page, isMobile }) => {
 
 test("landing page starts a new learner at the first lesson", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByTestId("splash")).toBeHidden({ timeout: 5000 });
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Learn Git by doing.");
   await page.getByTestId("hero-start").click();
   await expect(page).toHaveURL(/\/learn\/git-basics\/what-is-git$/);
@@ -113,7 +112,6 @@ test.describe("landing page hero demo", () => {
 
   test("steps through by keyboard and leads to the playground", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("splash")).toBeHidden({ timeout: 5000 });
     const demo = page.getByRole("figure", { name: "Demo: Your first commit" });
     const repository = demo.getByRole("group", { name: "Repository" });
     // Reduced motion: it waits for the visitor instead of playing.
@@ -129,7 +127,6 @@ test.describe("landing page hero demo", () => {
 
 test("every landing page link leads somewhere real", async ({ page, request }) => {
   await page.goto("/");
-  await expect(page.getByTestId("splash")).toBeHidden({ timeout: 5000 });
   const hrefs = await page
     .locator("main a[href^='/'], footer a[href^='/'], header a[href^='/']")
     .evaluateAll((links) => [...new Set(links.map((link) => link.getAttribute("href") ?? ""))]);
@@ -145,7 +142,6 @@ test("a returning learner is offered to continue where they left off", async ({ 
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.waitForSelector('html[data-progress="saved"]');
   await page.goto("/");
-  await expect(page.getByTestId("splash")).toBeHidden({ timeout: 5000 });
   const start = page.getByTestId("hero-start");
   await expect(start).toHaveText(/Continue learning/);
   await expect(start).toHaveAttribute("href", "/learn/branching/understanding-head");

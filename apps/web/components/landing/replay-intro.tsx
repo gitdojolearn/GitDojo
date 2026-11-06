@@ -4,7 +4,7 @@ import { type ReactNode } from "react";
 import { replayIntro } from "./splash-controller";
 
 /**
- * Plays the landing-page intro again. The label (with its icon) comes from the server, so this
+ * Plays the first-visit intro again. The label (with its icon) comes from the server, so this
  * ships no icon code of its own.
  */
 export function ReplayIntro({ children }: { children: ReactNode }) {

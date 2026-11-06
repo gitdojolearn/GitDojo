@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { SPLASH_SEEN_KEY } from "./components/landing/splash-script";
 import { REQUIRED_AUTH_ENV, SESSION_SECRET_ENV } from "./lib/auth/config";
 
 const PORT = Number(process.env.PORT ?? 3100);
@@ -50,10 +51,14 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "on-first-retry",
-    // Each test starts with the intro enabled; tests that visit the landing page should account for it.
+    // Every test starts as a returning visitor, so the first-visit intro never covers the landing
+    // page. splash.spec.ts opts back in with empty storage.
     storageState: {
       cookies: [],
-      origins: [],
+      origins: [baseURL, authBaseURL].map((origin) => ({
+        origin,
+        localStorage: [{ name: SPLASH_SEEN_KEY, value: "1" }],
+      })),
     },
   },
   projects: [
