@@ -12,12 +12,14 @@ import next from "@gitdojo/config/eslint/next";
  */
 const LAYERS = [
   ["auth", "theme"],
+  ["settings"],
+  ["palette"],
   ["progress", "repository", "terminal"],
   ["certificates"],
   ["course", "challenges", "editor", "conflicts", "releases"],
   ["lesson", "errors"],
   ["workspace", "dashboard"],
-  ["playground", "practice"],
+  ["playground", "practice", "commands", "docs"],
 ];
 
 /**

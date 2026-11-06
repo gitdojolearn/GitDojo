@@ -1,7 +1,9 @@
-import { Button } from "@gitdojo/ui";
+import { Button, IconButton } from "@gitdojo/ui";
+import { Settings } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode } from "react";
 import { AccountControls } from "@/features/auth";
+import { PaletteButton } from "@/features/palette";
 import { ThemeToggle } from "@/features/theme";
 import { SITE } from "@/lib/site";
 import { GitHubIcon } from "./github-icon";
@@ -16,7 +18,14 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: "Assessment", href: "/assessment", external: false },
   { label: "Playground", href: "/playground", external: false },
   { label: "Dashboard", href: "/dashboard", external: false },
-  { label: "Docs", href: SITE.docsUrl, external: true },
+  { label: "Commands", href: "/commands", external: false },
+  { label: "Docs", href: SITE.docsUrl, external: false },
+];
+
+/** The phone menu also holds what the header has no room for there. */
+const MOBILE_ITEMS: readonly NavItem[] = [
+  ...NAV_ITEMS,
+  { label: "Settings", href: "/settings", external: false },
 ];
 
 /** `action`: an extra call to action for this page (the landing page's "Start learning"). */
@@ -52,16 +61,22 @@ export function SiteHeader({ action }: { action?: ReactNode } = {}) {
         </div>
         <div className="flex items-center gap-2">
           {action ? <div className="hidden sm:block">{action}</div> : null}
+          <PaletteButton />
           <ThemeToggle />
+          <IconButton asChild aria-label="Settings" className="max-sm:hidden">
+            <Link href="/settings" data-testid="settings-link">
+              <Settings />
+            </Link>
+          </IconButton>
           <Button asChild variant="secondary" size="sm">
             <a href={SITE.githubUrl} aria-label="Star on GitHub">
               <GitHubIcon />
               {/* With a page action there is no room for the label next to the full nav. */}
-              <span className={action ? "hidden" : "hidden lg:inline"}>Star on GitHub</span>
+              <span className={action ? "hidden" : "hidden 2xl:inline"}>Star on GitHub</span>
             </a>
           </Button>
           <AccountControls />
-          <MobileNav items={NAV_ITEMS} />
+          <MobileNav items={MOBILE_ITEMS} />
         </div>
       </div>
     </header>

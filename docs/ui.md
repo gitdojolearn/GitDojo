@@ -2112,6 +2112,12 @@ attributes with `content: attr(...)`, so screen readers, tests and text queries 
 real files and commits. Everything is CSS, so the global `prefers-reduced-motion` rule turns it
 off; `useCountUp` checks the same media query.
 
+Settings → Animation speed changes all of it at once. `SETTINGS_SCRIPT` sets `data-motion` on
+`<html>` before the first paint: `slow` sets `--gd-motion-scale: 2`, which every educational
+`--animate-gd-*` token multiplies its duration (and delay) by, and `off` applies the same rules as
+reduced motion. `motionScale()` gives scripts the same answer. Dialogs, tooltips and the cursor
+blink keep their speed: they are not teaching anything.
+
 # 56. MICROINTERACTIONS
 
 Good examples:

@@ -36,6 +36,13 @@ const PAGES = [
   { name: "certification track", path: "/certification" },
   { name: "privacy notice", path: "/privacy" },
   { name: "terms of use", path: "/terms" },
+  { name: "settings", path: "/settings" },
+  { name: "command reference", path: "/commands" },
+  { name: "command page", path: "/commands/reset" },
+  { name: "docs index", path: "/docs" },
+  { name: "docs page", path: "/docs/lesson-authoring" },
+  { name: "open source", path: "/open-source" },
+  { name: "page not found", path: "/this-page-does-not-exist" },
 ];
 
 for (const theme of THEMES) {
@@ -144,6 +151,18 @@ for (const theme of THEMES) {
       await page.keyboard.press("Escape");
       await expect(dialog).toBeHidden();
       await expect(button).toBeFocused();
+    });
+
+    test("command palette is keyboard operable and accessible", async ({ page }) => {
+      await page.goto("/learn");
+      await page.getByTestId("palette-button").click();
+      const input = page.getByRole("combobox", { name: "Search" });
+      await expect(input).toBeFocused();
+      await page.keyboard.type("branch");
+      await expect(page.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+      await expectNoViolations(page);
+      await page.keyboard.press("Escape");
+      await expect(input).toBeHidden();
     });
 
     test("dashboard reset dialog is keyboard operable", async ({ page }) => {

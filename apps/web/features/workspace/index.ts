@@ -12,6 +12,8 @@ export { createBrowserLessonEnvironment } from "./services/browser-environment";
 export { settleEditor } from "./services/git-editor";
 export { WorkspaceSession } from "./services/workspace-session";
 export { WorkbenchPanel } from "./components/WorkbenchPanel";
+export { ResizeHandle } from "./components/ResizeHandle";
+export { useResizableColumns } from "./hooks/use-resizable-columns";
 export {
   PracticeSession,
   workspaceIdForPractice,

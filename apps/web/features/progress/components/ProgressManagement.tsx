@@ -8,6 +8,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogTitle,
+  toast,
 } from "@gitdojo/ui";
 import { CloudCheck, CloudOff, RefreshCw, RotateCcw, Settings2 } from "lucide-react";
 import { useState } from "react";
@@ -16,19 +17,23 @@ import { resetProgress, syncNow, useProgressStore } from "../state/use-progress-
 import { ProgressBackupTransfer } from "./ProgressBackupTransfer";
 import { ProgressReportExport } from "./ProgressReportExport";
 
+/** Confirms a backup or report on screen, and to assistive technology. */
+function announce(message: string) {
+  toast({ title: message, tone: "success" });
+}
+
 /** Download a PDF progress report, or reset progress after an explicit confirmation. */
 export function ProgressManagement() {
   const signedIn = useProgressStore((state) => state.mode !== "anonymous");
   const [open, setOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [announcement, setAnnouncement] = useState("");
 
   const reset = async () => {
     setResetting(true);
     try {
       await resetProgress();
       setOpen(false);
-      setAnnouncement("Learning progress reset.");
+      toast({ title: "Learning progress reset.", tone: "success" });
     } finally {
       setResetting(false);
     }
@@ -50,8 +55,8 @@ export function ProgressManagement() {
       </p>
       {signedIn ? <SyncStatus /> : null}
       <div className="mt-4 flex flex-wrap gap-3">
-        <ProgressBackupTransfer onMessage={setAnnouncement} />
-        <ProgressReportExport onExported={setAnnouncement} />
+        <ProgressBackupTransfer onMessage={announce} />
+        <ProgressReportExport onExported={announce} />
         {signedIn ? null : (
           <Button
             variant="danger"
@@ -64,9 +69,6 @@ export function ProgressManagement() {
           </Button>
         )}
       </div>
-      <p role="status" className="sr-only">
-        {announcement}
-      </p>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

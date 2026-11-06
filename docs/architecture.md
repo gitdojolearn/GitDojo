@@ -360,14 +360,17 @@ Each third-party SDK is imported in one place, so replacing or upgrading it touc
 - **One-way layers (lint).** A feature may import only features in a **lower** layer, so the
   dependency graph cannot have a cycle:
 
-  | Layer | Features                                      |
-  | ----- | --------------------------------------------- |
-  | 5     | `playground`, `practice`                      |
-  | 4     | `workspace`, `dashboard` (page shells)        |
-  | 3     | `lesson`, `errors`                            |
-  | 2     | `course`, `challenges`, `editor`, `conflicts` |
-  | 1     | `progress`, `repository`, `terminal`          |
-  | 0     | `auth`                                        |
+  | Layer | Features                                                        |
+  | ----- | --------------------------------------------------------------- |
+  | 8     | `playground`, `practice`, `commands`, `docs`                    |
+  | 7     | `workspace`, `dashboard` (page shells)                          |
+  | 6     | `lesson`, `errors`                                              |
+  | 5     | `course`, `challenges`, `editor`, `conflicts`, `releases`       |
+  | 4     | `certificates`                                                  |
+  | 3     | `progress`, `repository`, `terminal`                            |
+  | 2     | `palette` (⌘K; pages register actions with `usePaletteActions`) |
+  | 1     | `settings` (animation speed, terminal and editor preferences)   |
+  | 0     | `auth`, `theme`                                                 |
 
   When a lower feature needs to trigger something in a higher one, invert the dependency: the
   repository panels take `onOpenFile` / `onResolveConflict` callbacks, and the workspace
@@ -467,6 +470,10 @@ apps/web/
 │   ├── lesson/                 lesson panel, objectives, hints, completion, lesson content
 │   ├── playground/             PlaygroundSession, scenario picker, playground layout
 │   ├── practice/               practice browser, Surprise me, practice workspace and task panel
+│   ├── settings/               /settings, preferences store and its pre-paint script
+│   ├── palette/                ⌘K command palette, page actions and shortcuts
+│   ├── commands/               /commands reference, built from the parser specs and lessons
+│   ├── docs/                   /docs sidebar and contents (pages rendered by lib/docs.ts)
 │   └── workspace/              WorkspaceSession, LearningSession, PracticeSession, Git editor dialog,
 │                               browser environment, layouts
 │                               (lesson workspace, concept lessons, file panels)

@@ -2,6 +2,7 @@ import { emptyProgress, type ProgressCatalog, type ProgressReport } from "@gitdo
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearToasts, Toaster } from "@gitdojo/ui";
 import { useAccountSession } from "@/features/auth";
 import { ProgressManagement } from "./components/ProgressManagement";
 import { suggestedReportName } from "./components/ProgressReportExport";
@@ -36,12 +37,18 @@ function load() {
     status: "ready",
     persistence: { mode: "saved" },
   });
-  render(<ProgressManagement />);
+  render(
+    <>
+      <ProgressManagement />
+      <Toaster />
+    </>,
+  );
 }
 
 let clicked: string[] = [];
 
 beforeEach(() => {
+  clearToasts();
   resetProgressStoreForTests();
   pdf.create.mockReset();
   clicked = [];
@@ -82,7 +89,9 @@ describe("PDF progress report export", () => {
     expect(pdf.create.mock.calls[0]?.[0].learnerName).toBe("GitDojo Learner");
     expect(clicked).toEqual([expect.stringMatching(/^gitdojo-progress-\d{4}-\d{2}-\d{2}\.pdf$/)]);
     expect(screen.queryByTestId("report-dialog")).toBeNull();
-    expect(screen.getByText("Progress report downloaded (2 pages).")).toBeInTheDocument();
+    expect(await screen.findByTestId("toast")).toHaveTextContent(
+      "Progress report downloaded (2 pages).",
+    );
   });
 
   it("puts an optional name on the report", async () => {
@@ -128,7 +137,9 @@ describe("PDF progress report export", () => {
       finish({ blob: new Blob(["%PDF-"]), pages: 1 });
       await Promise.resolve();
     });
-    expect(screen.getByText("Progress report downloaded (1 page).")).toBeInTheDocument();
+    expect(await screen.findByTestId("toast")).toHaveTextContent(
+      "Progress report downloaded (1 page).",
+    );
   });
 
   it("explains a failure plainly and lets the learner try again", async () => {

@@ -13,6 +13,7 @@ const FOOTER: { heading: string; links: { label: string; href: string; external?
         { label: "Challenges", href: "/challenges" },
         { label: "Practice", href: "/practice" },
         { label: "Playground", href: "/playground" },
+        { label: "Git commands", href: "/commands" },
       ],
     },
     {
@@ -27,8 +28,10 @@ const FOOTER: { heading: string; links: { label: string; href: string; external?
       heading: "Project",
       links: [
         { label: "What's new", href: "/whats-new" },
-        { label: "Documentation", href: SITE.docsUrl, external: true },
+        { label: "Documentation", href: SITE.docsUrl },
+        { label: "Open source", href: "/open-source" },
         { label: "GitHub", href: SITE.githubUrl, external: true },
+        { label: "Settings", href: "/settings" },
         { label: "Privacy", href: "/privacy" },
         { label: "Terms", href: "/terms" },
       ],

@@ -19,3 +19,96 @@
 .react-flow .react-flow__attribution a {
   color: var(--text-muted);
 }
+
+/* Rendered Markdown on /docs. Everything comes from tokens, so it follows the theme. */
+@layer components {
+  .gd-prose {
+    @apply text-body text-fg-secondary;
+  }
+  .gd-prose > * + * {
+    @apply mt-4;
+  }
+  .gd-prose h1 {
+    @apply text-h2 font-semibold tracking-tight text-fg sm:text-h1;
+  }
+  .gd-prose h2 {
+    @apply mt-12 scroll-mt-20 border-t border-border-subtle pt-8 text-h3 font-semibold text-fg;
+  }
+  .gd-prose h3 {
+    @apply mt-8 scroll-mt-20 text-h4 font-semibold text-fg;
+  }
+  .gd-prose h4,
+  .gd-prose h5,
+  .gd-prose h6 {
+    @apply mt-6 scroll-mt-20 text-body font-semibold text-fg;
+  }
+  .gd-prose :is(h1, h2, h3, h4, h5, h6) {
+    @apply relative;
+  }
+  .gd-prose .gd-anchor {
+    @apply absolute -left-5 font-normal text-fg-faint no-underline opacity-0 transition-opacity;
+  }
+  .gd-prose .gd-anchor::before {
+    content: "#";
+  }
+  .gd-prose :is(h1, h2, h3, h4, h5, h6):hover .gd-anchor {
+    @apply opacity-100;
+  }
+  .gd-prose a {
+    @apply text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent;
+  }
+  .gd-prose strong {
+    @apply font-semibold text-fg;
+  }
+  .gd-prose :not(pre) > code {
+    @apply rounded-sm border border-border-subtle bg-elevated px-1 py-px font-mono text-[0.88em] text-fg;
+  }
+  .gd-prose pre {
+    @apply overflow-x-auto rounded-lg border border-border-subtle bg-terminal p-4 font-mono text-caption text-fg-terminal;
+  }
+  .gd-prose ul {
+    @apply list-disc space-y-1.5 pl-6 marker:text-fg-muted;
+  }
+  .gd-prose ol {
+    @apply list-decimal space-y-1.5 pl-6 marker:text-fg-muted;
+  }
+  .gd-prose li > :is(ul, ol) {
+    @apply mt-1.5;
+  }
+  .gd-prose blockquote {
+    @apply border-l-2 border-accent-border pl-4 text-fg-secondary;
+  }
+  .gd-prose hr {
+    @apply my-10 border-border-subtle;
+  }
+  .gd-prose img {
+    @apply max-w-full rounded-lg;
+  }
+  .gd-prose .gd-table {
+    @apply overflow-x-auto rounded-lg border border-border-subtle;
+  }
+  .gd-prose table {
+    @apply w-full text-left text-small;
+  }
+  .gd-prose thead {
+    @apply bg-surface text-fg;
+  }
+  .gd-prose th,
+  .gd-prose td {
+    @apply border-b border-border-subtle px-3 py-2 align-top;
+  }
+  .gd-prose tr:last-child td {
+    @apply border-b-0;
+  }
+}
+
+/* While a workspace splitter is dragged: no text selection, and the resize cursor everywhere. */
+body[data-resizing] {
+  cursor: col-resize;
+  user-select: none;
+}
+body[data-resizing] iframe,
+body[data-resizing] .xterm,
+body[data-resizing] .monaco-editor {
+  pointer-events: none;
+}

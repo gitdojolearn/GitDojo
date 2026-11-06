@@ -35,6 +35,7 @@ export {
   PanelTitle,
 } from "./components/panel";
 export { SegmentedProgress, type SegmentedProgressProps } from "./components/progress";
+export { clearToasts, toast, Toaster, type ToastOptions, type ToastTone } from "./components/toast";
 export { Tooltip, TooltipProvider, type TooltipProps } from "./components/tooltip";
 export { cn } from "./lib/cn";
 export { useChangeCount } from "./lib/use-change-count";

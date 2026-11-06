@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@gitdojo/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { useThemePreference } from "./hooks/use-theme";
 import {
   applyTheme,
   readStoredTheme,
@@ -146,5 +147,69 @@ describe("theme toggle", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  describe("system", () => {
+    let light = false;
+    const changeListeners = new Set<() => void>();
+
+    beforeEach(() => {
+      light = false;
+      changeListeners.clear();
+      vi.stubGlobal("matchMedia", (query: string) => ({
+        get matches() {
+          return query.includes("light") && light;
+        },
+        media: query,
+        addEventListener: (_: string, listener: () => void) => changeListeners.add(listener),
+        removeEventListener: (_: string, listener: () => void) => changeListeners.delete(listener),
+      }));
+      window.matchMedia = globalThis.matchMedia;
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function Preference() {
+      return <p data-testid="preference">{useThemePreference()}</p>;
+    }
+
+    it("asks the operating system before the first paint", () => {
+      localStorage.setItem(THEME_STORAGE_KEY, "system");
+      light = true;
+      runThemeScript();
+      expect(root.dataset.theme).toBe("light");
+      expect(meta("theme-color")).toBe(THEME_COLORS.light);
+      light = false;
+      runThemeScript();
+      expect(root.dataset.theme).toBe("dark");
+    });
+
+    it("is saved as a preference and follows the operating system while chosen", () => {
+      render(<Preference />);
+      act(() => {
+        setTheme("system");
+      });
+      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("system");
+      expect(screen.getByTestId("preference")).toHaveTextContent("system");
+      expect(root.dataset.theme).toBe("dark");
+
+      light = true;
+      act(() => {
+        for (const listener of changeListeners) listener();
+      });
+      expect(root.dataset.theme).toBe("light");
+
+      // An explicit choice stops following it.
+      act(() => {
+        setTheme("dark");
+      });
+      act(() => {
+        for (const listener of changeListeners) listener();
+      });
+      expect(root.dataset.theme).toBe("dark");
+      expect(screen.getByTestId("preference")).toHaveTextContent("dark");
+    });
   });
 });

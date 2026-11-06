@@ -227,30 +227,33 @@
   --text-micro: 11px;
   --text-micro--line-height: 16px;
 
-  /* Motion: fast 120ms, standard 180ms, state change 250ms, educational movement 300-400ms */
+  /* Motion: fast 120ms, standard 180ms, state change 250ms, educational movement 300-400ms.
+     Movement that teaches scales with --gd-motion-scale (Settings → Animation speed). */
   --animate-gd-enter: gd-enter 250ms ease-out both;
-  --animate-gd-move-in: gd-move-in 350ms ease-out both;
-  --animate-gd-pop: gd-pop 300ms ease-out both;
-  --animate-gd-check: gd-check 250ms ease-out both;
+  --animate-gd-move-in: gd-move-in calc(350ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-pop: gd-pop calc(300ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-check: gd-check calc(250ms * var(--gd-motion-scale, 1)) ease-out both;
   --animate-gd-pulse-x: gd-pulse-x 1.6s ease-in-out infinite;
   /* A terminal cursor: blinks a few times, then stays solid (WCAG 2.2.2). */
   --animate-gd-blink: gd-blink 1.1s steps(1) 6 both;
   /* Educational movement in the repository views. Offsets come from --gd-from-x / --gd-from-y. */
-  --animate-gd-glide: gd-glide 400ms ease-out both;
-  --animate-gd-draw: gd-draw 400ms ease-out both;
-  --animate-gd-ghost-out: gd-ghost-out 450ms ease-out 150ms both;
-  --animate-gd-copy: gd-copy 400ms ease-out both;
-  --animate-gd-move-in-reverse: gd-move-in-reverse 350ms ease-out both;
-  --animate-gd-rise: gd-rise 350ms ease-out both;
-  --animate-gd-leave-right: gd-leave-right 350ms ease-out both;
-  --animate-gd-leave-left: gd-leave-left 350ms ease-out both;
-  --animate-gd-leave-down: gd-leave-down 350ms ease-out both;
-  --animate-gd-leave-fade: gd-leave-fade 400ms ease-out both;
-  --animate-gd-travel-up: gd-travel-up 400ms ease-out both;
-  --animate-gd-travel-down: gd-travel-down 400ms ease-out both;
+  --animate-gd-glide: gd-glide calc(400ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-draw: gd-draw calc(400ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-ghost-out: gd-ghost-out calc(450ms * var(--gd-motion-scale, 1)) ease-out
+    calc(150ms * var(--gd-motion-scale, 1)) both;
+  --animate-gd-copy: gd-copy calc(400ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-move-in-reverse: gd-move-in-reverse calc(350ms * var(--gd-motion-scale, 1)) ease-out
+    both;
+  --animate-gd-rise: gd-rise calc(350ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-leave-right: gd-leave-right calc(350ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-leave-left: gd-leave-left calc(350ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-leave-down: gd-leave-down calc(350ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-leave-fade: gd-leave-fade calc(400ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-travel-up: gd-travel-up calc(400ms * var(--gd-motion-scale, 1)) ease-out both;
+  --animate-gd-travel-down: gd-travel-down calc(400ms * var(--gd-motion-scale, 1)) ease-out both;
   /* One short pulse, never a loop: it marks a change without demanding attention. */
-  --animate-gd-attention: gd-attention 600ms ease-out 1 both;
-  --animate-gd-fill: gd-fill 600ms ease-out both;
+  --animate-gd-attention: gd-attention calc(600ms * var(--gd-motion-scale, 1)) ease-out 1 both;
+  --animate-gd-fill: gd-fill calc(600ms * var(--gd-motion-scale, 1)) ease-out both;
 }
 
 @keyframes gd-enter {
@@ -457,6 +460,11 @@
     outline-offset: 2px;
   }
 
+  /* Settings → Animation speed. Set on <html> before the first paint (SETTINGS_SCRIPT). */
+  :root[data-motion="slow"] {
+    --gd-motion-scale: 2;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     ::before,
@@ -465,5 +473,14 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+
+  :root[data-motion="off"] *,
+  :root[data-motion="off"] ::before,
+  :root[data-motion="off"] ::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
