@@ -20,6 +20,8 @@ describe("command reference", () => {
   it("matches examples to their command only", () => {
     expect(isAbout("git stash pop", "stash")).toBe(true);
     expect(isAbout("git status", "stash")).toBe(false);
+    expect(isAbout("git stash", "stash")).toBe(true);
+    expect(isAbout("git stashed", "stash")).toBe(false);
     expect(isAbout("git cherry-pick abc123", "cherry-pick")).toBe(true);
   });
 

@@ -16,6 +16,7 @@ describe("docs", () => {
     expect(slugify("Adaptive hints")).toBe("adaptive-hints");
     expect(slugify("56. MICROINTERACTIONS")).toBe("56-microinteractions");
     expect(slugify("`git push --force`")).toBe("git-push---force");
+    expect(slugify("<script>alert(1)</script> Setup")).toBe("scriptalert1script-setup");
   });
 
   it("keeps links between docs on the site and sends other repository files to GitHub", () => {

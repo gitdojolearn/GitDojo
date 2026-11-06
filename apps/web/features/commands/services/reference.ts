@@ -45,7 +45,11 @@ export function formatFlag(flag: FlagSpec): string {
 
 /** `git stash pop` is about `stash`; `git status` is not about `stash`. */
 export function isAbout(command: string, name: string): boolean {
-  return new RegExp(`^git ${name.replace(/[-]/g, "\\-")}(\\s|$)`).test(command.trim());
+  const prefix = `git ${name}`;
+  const text = command.trim();
+  if (!text.startsWith(prefix)) return false;
+  const next = text.charAt(prefix.length);
+  return next === "" || /\s/.test(next);
 }
 
 function examplesIn(lesson: LessonDefinition, name: string, link: LessonLink): CommandExample[] {
