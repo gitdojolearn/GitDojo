@@ -1,12 +1,12 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
-// A first-time visitor: nothing stored (the config marks the intro as seen for every other test).
+// No browser storage is needed: the intro runs on every landing-page visit.
 test.use({ storageState: { cookies: [], origins: [] } });
 
 const intro = (page: Page) => page.locator("html");
 
-test("a first visit opens with the intro, which gives way to the page by itself", async ({
+test("each landing-page visit opens with the intro, which gives way to the page by itself", async ({
   page,
 }) => {
   await page.goto("/");
@@ -17,10 +17,11 @@ test("a first visit opens with the intro, which gives way to the page by itself"
   await page.getByTestId("hero-start").click();
   await expect(page).toHaveURL(/\/learn\//);
 
-  // Returning: straight to the page.
+  // Returning to the landing page replays the intro.
   await page.goto("/");
-  await expect(intro(page)).not.toHaveAttribute("data-splash", /.*/);
-  await expect(page.getByTestId("splash")).toBeHidden();
+  await expect(intro(page)).toHaveAttribute("data-splash", "play");
+  await expect(page.getByTestId("splash")).toBeVisible();
+  await expect(intro(page)).not.toHaveAttribute("data-splash", /.*/, { timeout: 5000 });
 });
 
 test("Skip is the first Tab stop, and skipping hands focus to the page", async ({ page }) => {
