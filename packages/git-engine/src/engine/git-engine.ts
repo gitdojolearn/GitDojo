@@ -453,6 +453,8 @@ export interface GitDiffOptions {
   revisions?: string[];
   /** Pathspecs that limit the diff (default: everything). */
   paths?: string[];
+  /** `--` was typed: every word in `revisions` must name a commit (`fatal: bad revision`). */
+  separated?: boolean;
 }
 
 export interface GitDiffData {

@@ -169,6 +169,7 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
       staged: parsed.flags.staged === true,
       revisions: parsed.args.slice(0, split),
       paths: parsed.args.slice(split),
+      separated: parsed.pathsFrom !== undefined,
     });
   },
   restore: (parsed, { git }) => {
@@ -407,7 +408,9 @@ const gitHandlers: Record<SupportedGitCommand, GitHandler> = {
     // Not a branch or commit: a file to put back, as in `git checkout README.md`.
     if (parsed.pathsFrom === undefined) {
       const restored = await git.checkoutFiles({ paths: [name], separated: false });
-      if (restored.ok) return restored;
+      // A file that exists but cannot be restored (`is unmerged`) says why; only no match at
+      // all falls through to Git's pathspec message below.
+      if (restored.ok || restored.error?.code !== "FILE_NOT_FOUND") return restored;
     }
     // `git checkout` also restores files, so Git reports an unknown name as a pathspec. The
     // learner almost always meant a branch, so that is the error code kept for explanations.

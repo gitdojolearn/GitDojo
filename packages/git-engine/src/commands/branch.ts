@@ -270,12 +270,22 @@ export async function runRenameBranch(
   if (!isValidBranchName(name)) {
     return failure(gitError("INVALID_BRANCH_NAME", `fatal: '${name}' is not a valid branch name`));
   }
+  // A branch being rebased is in use even while HEAD is detached: the rebase moves it at the end.
+  const rebasing = (await readMergeState(ctx))?.rebase?.branch;
+  if (old === rebasing) {
+    return failure(
+      gitError(
+        "OPERATION_IN_PROGRESS",
+        `fatal: branch refs/heads/${old} is being rebased at ${ctx.displayDir}`,
+      ),
+    );
+  }
   const existing = await git.listBranches({ fs: ctx.fs, dir: ctx.dir });
   if (existing.includes(name)) {
     if (!force) {
       return failure(gitError("BRANCH_EXISTS", `fatal: a branch named '${name}' already exists`));
     }
-    if (name === current) {
+    if (name === current || name === rebasing) {
       return failure(
         gitError(
           "BRANCH_CHECKED_OUT",
@@ -296,13 +306,6 @@ export async function runRenameBranch(
       ),
     );
   }
-  const rebase = (await readMergeState(ctx))?.rebase;
-  if (rebase?.branch === old) {
-    return failure(
-      gitError("OPERATION_IN_PROGRESS", `fatal: branch '${old}' is being rebased; finish it first`),
-    );
-  }
-
   const upstream = await readUpstreamConfig(ctx, old);
   if (oid !== null) {
     if (existing.includes(name)) {

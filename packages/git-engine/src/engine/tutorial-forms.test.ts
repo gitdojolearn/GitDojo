@@ -123,6 +123,53 @@ describe("git branch -m / -M", () => {
   });
 });
 
+describe("git branch -m during a rebase", () => {
+  /** feature and main both change app.txt, so rebasing feature stops on a conflict. */
+  async function stoppedRebase() {
+    const { ws } = await repo();
+    await ws.git.createAndSwitchBranch("feature", "HEAD~1");
+    const tip = await commit(ws, "F", { "app.txt": "one\nTWO\n" }, NOW - 50);
+    await ws.git.switchBranch("main");
+    await commit(ws, "M", { "app.txt": "one\ntwo\nthree\nfour\n" }, NOW - 40);
+    await ws.git.switchBranch("feature");
+    expect((await ws.git.rebase("main")).ok).toBe(false);
+    return { ws, tip };
+  }
+
+  async function refusesRenames(ws: TestWorkspace) {
+    // HEAD is detached, but the branch being rebased is still in use.
+    expect(await ws.git.renameBranch("feature", { from: "main", force: true })).toMatchObject({
+      ok: false,
+      error: { code: "BRANCH_CHECKED_OUT" },
+    });
+    expect(await ws.git.renameBranch("other", { from: "feature" })).toMatchObject({
+      ok: false,
+      output: "fatal: branch refs/heads/feature is being rebased at ~/project",
+    });
+  }
+
+  it("keeps the branch for --abort", async () => {
+    const { ws, tip } = await stoppedRebase();
+    await refusesRenames(ws);
+    expect((await ws.git.rebaseControl("abort")).ok).toBe(true);
+    expect((await ws.git.listBranches()).find((branch) => branch.name === "feature")?.oid).toBe(
+      tip,
+    );
+  });
+
+  it("keeps the branch for --continue", async () => {
+    const { ws, tip } = await stoppedRebase();
+    await refusesRenames(ws);
+    await write(ws, { "app.txt": "one\nTWO\nthree\nfour\n" });
+    await ws.git.add(["app.txt"]);
+    expect((await ws.git.rebaseControl("continue")).ok).toBe(true);
+    const branches = await ws.git.listBranches();
+    expect(branches.map((branch) => branch.name)).toEqual(["feature", "main"]);
+    expect(branches.find((branch) => branch.current)?.name).toBe("feature");
+    expect(branches.find((branch) => branch.name === "feature")?.oid).not.toBe(tip);
+  });
+});
+
 describe("git commit -a and the commit editor", () => {
   it("stages edits and deletions of tracked files, never new files", async () => {
     const { ws } = await repo();
@@ -325,6 +372,10 @@ describe("git diff between commits", () => {
     expect(result.error?.code).toBe("INVALID_REVISION");
     expect(result.output).toMatch(/^fatal: ambiguous argument 'nope': unknown revision or path/);
     expect((await ws.git.diff({ revisions: ["main..nope"] })).error?.code).toBe("INVALID_REVISION");
+    // With `--` typed, a word before it must be a commit, even if a file has that name.
+    expect(
+      (await ws.git.diff({ revisions: ["app.txt"], paths: ["notes.md"], separated: true })).output,
+    ).toBe("fatal: bad revision 'app.txt'");
     expect((await ws.git.diff({ revisions: ["HEAD", "HEAD~1", "HEAD"] })).output).toMatch(
       /^fatal: GitDojo compares at most two commits/,
     );

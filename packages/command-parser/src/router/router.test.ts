@@ -429,6 +429,16 @@ describe("command router", () => {
       );
     });
 
+    it("refuses a word before -- that names no commit", async () => {
+      await firstCommit();
+      // Before `--`, every word must be a commit.
+      expect(await runCommandLine("git diff README.md -- other.txt", context)).toMatchObject({
+        ok: false,
+        output: "fatal: bad revision 'README.md'",
+        errorCode: "INVALID_REVISION",
+      });
+    });
+
     it("shows a command's usage for -h, --help and git help, without running it", async () => {
       const help = await runCommandLine("git commit -h", context);
       expect(help.ok).toBe(true);

@@ -109,6 +109,10 @@ async function readComparison(ctx: GitContext, options: GitDiffOptions): Promise
       continue;
     }
     const oid = await resolveRevision(ctx, word);
+    // Before `--`, every word is a commit; without it, the first that is not starts the paths.
+    if (oid === null && options.separated) {
+      return refuse("INVALID_REVISION", `fatal: bad revision '${word}'`);
+    }
     if (oid === null) break;
     if (commits.length === 2) {
       return refuse(
