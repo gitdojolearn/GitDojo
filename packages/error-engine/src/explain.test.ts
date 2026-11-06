@@ -180,7 +180,9 @@ describe("explainCommand", () => {
     expect((await run("git commit -m"))?.code).toBe("MISSING_VALUE");
     expect((await run('git commit -m "oops'))?.code).toBe("UNCLOSED_QUOTE");
     expect(await run("git init")).toBeNull();
-    expect((await run("git commit"))?.code).toBe("COMMIT_MESSAGE_REQUIRED");
+    // Without -m, Git opens the editor once there is something to commit; a blank -m is refused.
+    expect((await run("git commit"))?.code).toBe("NOTHING_TO_COMMIT");
+    expect((await run('git commit -m "  "'))?.code).toBe("COMMIT_MESSAGE_REQUIRED");
   });
 
   it("explains tags, remotes and interactive rebases", () => {
