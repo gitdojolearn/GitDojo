@@ -1,9 +1,14 @@
+import git from "isomorphic-git";
 import { type GitContext } from "../engine/context";
 import { failure, gitError, notARepository, success } from "../engine/errors";
-import { type GitRestoreOptions, type GitRestoreResult } from "../engine/git-engine";
+import {
+  type GitCheckoutFilesOptions,
+  type GitRestoreOptions,
+  type GitRestoreResult,
+} from "../engine/git-engine";
 import { readMergeState, unresolvedConflicts } from "../engine/merge-state";
 import { matchesPathspec, parsePathspecs } from "../engine/pathspec";
-import { isRepository, resolveRefOrNull } from "../engine/repository";
+import { isRepository, resolveRefOrNull, shortOid } from "../engine/repository";
 import { resolveRevision } from "../engine/revisions";
 import {
   applyWorkingTreeUpdates,
@@ -96,4 +101,46 @@ export async function runRestore(
   }
   // Real `git restore` is silent on success.
   return success("", { restored: paths });
+}
+
+/**
+ * `git checkout [<commit>] [--] <path>...`, as older tutorials restore files: from the staging
+ * area (`git restore <path>`), or from a commit into both the staging area and the working tree
+ * (`git restore --source <commit> --staged --worktree <path>`). Without `--`, a first word that
+ * names a commit is the source, and Git reports what it updated.
+ */
+export async function runCheckoutFiles(
+  ctx: GitContext,
+  { paths: words, source: given, separated }: GitCheckoutFilesOptions,
+): Promise<GitRestoreResult> {
+  if (!(await isRepository(ctx))) return notARepository();
+  let source = given;
+  let paths = words;
+  const [first, ...rest] = words;
+  if (!separated && source === undefined && first !== undefined && rest.length > 0) {
+    if ((await resolveRevision(ctx, first)) !== null) {
+      source = first;
+      paths = rest;
+    }
+  }
+  const result = await runRestore(
+    ctx,
+    paths,
+    source === undefined ? {} : { source, staged: true, worktree: true },
+  );
+  if (!result.ok || separated) return result;
+
+  // Git counts the updated paths only when no `--` was typed.
+  const count = result.data?.restored.length ?? 0;
+  let from = "the index";
+  if (source !== undefined) {
+    const oid = await resolveRevision(ctx, source);
+    if (oid !== null) {
+      from = shortOid((await git.readCommit({ fs: ctx.fs, dir: ctx.dir, oid })).commit.tree);
+    }
+  }
+  return {
+    ...result,
+    output: `Updated ${String(count)} path${count === 1 ? "" : "s"} from ${from}`,
+  };
 }

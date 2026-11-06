@@ -48,6 +48,19 @@ export function parseCommand(raw: string): ParseResult {
   const [command, ...commandTokens] = rest;
   if (command === undefined) return fail(raw, parseError("MISSING_GIT_COMMAND", GIT_USAGE));
 
+  // `git help <command>` is `git <command> --help`; a bare `git help` lists the commands.
+  if (command === "help") {
+    const [topic, extra] = commandTokens;
+    if (topic === undefined) return fail(raw, parseError("MISSING_GIT_COMMAND", GIT_USAGE));
+    if (extra !== undefined) {
+      return fail(raw, parseError("UNEXPECTED_ARGUMENT", `error: unexpected argument '${extra}'`));
+    }
+    if (!isSupportedGitCommand(topic)) {
+      return fail(raw, parseError("UNSUPPORTED_GIT_COMMAND", notAGitCommandMessage(topic)));
+    }
+    return { ok: true, command: { program, command: topic, args: [], flags: {}, raw, help: true } };
+  }
+
   if (!isSupportedGitCommand(command)) {
     const message = PLANNED_GIT_COMMANDS.has(command)
       ? `git: '${command}' is not available in GitDojo yet.`
@@ -60,6 +73,10 @@ export function parseCommand(raw: string): ParseResult {
   if (!parsedOptions.ok) return fail(raw, parsedOptions.error);
 
   const { args, flags, pathsFrom } = parsedOptions;
+  // Like Git, `-h` wins over everything else on the line: the usage is shown, nothing runs.
+  if (parsedOptions.help) {
+    return { ok: true, command: { program, command, args: [], flags: {}, raw, help: true } };
+  }
   const maxArguments = spec.acceptsArguments ? (spec.maxArguments ?? Infinity) : 0;
   if (args.length > maxArguments) {
     return fail(
@@ -90,7 +107,13 @@ export function parseCommand(raw: string): ParseResult {
 }
 
 type OptionsResult =
-  | { ok: true; args: string[]; flags: ParsedCommand["flags"]; pathsFrom?: number }
+  | {
+      ok: true;
+      args: string[];
+      flags: ParsedCommand["flags"];
+      pathsFrom?: number;
+      help?: boolean;
+    }
   | { ok: false; error: ParseError };
 
 function findFlag(spec: GitCommandSpec, name: string): FlagSpec | undefined {
@@ -134,8 +157,16 @@ function parseOptions(spec: GitCommandSpec, tokens: string[]): OptionsResult {
       continue;
     }
 
+    if (token === "-h" || token === "--help") return { ok: true, args, flags, help: true };
+
     const isLong = token.startsWith("--");
     const body = token.slice(isLong ? 2 : 1);
+    // `git log -3`: a number alone is a count.
+    const countFlag = spec.countFlag === undefined ? undefined : findFlag(spec, spec.countFlag);
+    if (!isLong && countFlag && /^\d+$/.test(body)) {
+      setFlag(countFlag, body);
+      continue;
+    }
     const equalsIndex = isLong ? body.indexOf("=") : -1;
     // Short flags are single letters; anything after the letter is an attached value (`-mmsg`).
     const name = isLong ? (equalsIndex === -1 ? body : body.slice(0, equalsIndex)) : body.charAt(0);

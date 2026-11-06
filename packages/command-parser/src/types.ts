@@ -9,6 +9,8 @@ export interface ParsedCommand {
    * revision (`git reset HEAD~1 -- README.md`). Absent when there was no `--`.
    */
   pathsFrom?: number;
+  /** `-h` / `--help` (or `git help <command>`): show the command's usage instead of running it. */
+  help?: boolean;
 }
 
 export interface FlagSpec {
@@ -29,4 +31,6 @@ export interface GitCommandSpec {
   acceptsArguments: boolean;
   /** Upper bound on positional arguments; unlimited when omitted. */
   maxArguments?: number;
+  /** `-<n>` is short for this flag with the value `n`, as `git log -3` is `git log -n 3`. */
+  countFlag?: string;
 }

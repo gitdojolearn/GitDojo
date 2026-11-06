@@ -120,6 +120,14 @@ export interface GitLogOptions {
   revision?: string;
   /** `--all`: every branch's history, not just HEAD's. */
   all?: boolean;
+  /** `--graph`: draw the branch and merge lines next to the commits (in topological order). */
+  graph?: boolean;
+  /** `-n <number>` / `-<number>`: show at most this many commits. */
+  maxCount?: number;
+  /** `--stat`: each commit's diffstat (merges show none, as in Git). */
+  stat?: boolean;
+  /** `-p` / `--patch`: each commit's diff (merges show none, as in Git). */
+  patch?: boolean;
 }
 
 export interface GitCommitInput {
@@ -130,6 +138,8 @@ export interface GitCommitInput {
   noEdit?: boolean;
   /** `--amend --reset-author`: the amended commit is by the learner, as configured now. */
   resetAuthor?: boolean;
+  /** `-a` / `--all`: stage changes to tracked files first (new, untracked files stay out). */
+  all?: boolean;
   /** Defaults to the learner's `user.name` / `user.email` (GitDojo's own identity if unset). */
   author?: GitAuthor;
   /** Seconds since the Unix epoch. Defaults to now; lesson setup back-dates its commits. */
@@ -323,6 +333,31 @@ export interface GitBranchCreateData {
   oid: string;
 }
 
+export interface GitBranchRenameOptions {
+  /** The branch to rename (default: the current one). */
+  from?: string;
+  /** `-M`: replace an existing branch called the new name. */
+  force?: boolean;
+}
+
+export interface GitBranchRenameData {
+  from: string;
+  to: string;
+  /** `null` when the branch has no commits yet. */
+  oid: string | null;
+}
+
+export interface GitCheckoutFilesOptions {
+  paths: string[];
+  /** Take the files from this commit (and stage them) instead of from the staging area. */
+  source?: string;
+  /**
+   * Whether the paths came after `--`. Without it, a first word naming a commit is the source,
+   * and Git reports how many paths it updated.
+   */
+  separated: boolean;
+}
+
 export interface GitSwitchData {
   /** The branch HEAD is now attached to, or `null` when HEAD is detached. */
   branch: string | null;
@@ -411,8 +446,15 @@ export interface GitFileDiff {
 export interface GitDiffOptions {
   /** `--staged` / `--cached`: HEAD against the staging area instead of staging against files. */
   staged?: boolean;
+  /**
+   * Words typed before `--`: up to two commits (`HEAD~1`, `main feature`, `main..feature`,
+   * `main...feature`), then paths. A word that names no commit starts the paths, as in Git.
+   */
+  revisions?: string[];
   /** Pathspecs that limit the diff (default: everything). */
   paths?: string[];
+  /** `--` was typed: every word in `revisions` must name a commit (`fatal: bad revision`). */
+  separated?: boolean;
 }
 
 export interface GitDiffData {
@@ -561,6 +603,7 @@ export type GitMvResult = GitCommandResult<{
 }>;
 export type GitBranchListResult = GitCommandResult<GitBranchListData>;
 export type GitBranchCreateResult = GitCommandResult<GitBranchCreateData>;
+export type GitBranchRenameResult = GitCommandResult<GitBranchRenameData>;
 export type GitSwitchResult = GitCommandResult<GitSwitchData>;
 export type GitBranchDeleteResult = GitCommandResult<GitBranchDeleteData>;
 export type GitMergeResult = GitCommandResult<GitMergeData>;
@@ -626,6 +669,11 @@ export interface GitEngine {
   /** `git branch -d <name>` (`-D` with `force`): deletes a branch; `-d` refuses unmerged work. */
   deleteBranch(name: string, options?: { force?: boolean }): Promise<GitBranchDeleteResult>;
   /**
+   * `git branch -m [<old>] <new>` (`-M` with `force`): renames a branch (the current one by
+   * default, even before its first commit), with its reflog and upstream.
+   */
+  renameBranch(name: string, options?: GitBranchRenameOptions): Promise<GitBranchRenameResult>;
+  /**
    * `git switch <name>`: moves HEAD to an existing branch and updates the working tree.
    * `git switch -` goes back to the previous branch.
    */
@@ -644,8 +692,16 @@ export interface GitEngine {
   merge(branch: string, options?: GitMergeOptions): Promise<GitMergeResult>;
   /** `git merge --abort`: undoes a merge that stopped for conflicts. */
   abortMerge(): Promise<GitAbortMergeResult>;
-  /** `git diff [--staged] [<path>...]`: unified diff of unstaged (or staged) changes. */
+  /**
+   * `git diff [--staged] [<commit> [<commit>]] [<path>...]`: unified diff of unstaged (or staged)
+   * changes, or between commits.
+   */
   diff(options?: GitDiffOptions): Promise<GitDiffResult>;
+  /**
+   * `git checkout [<commit>] [--] <path>...`: puts files back from the staging area, or from a
+   * commit (staging them too), like `git restore [--source <commit> --staged --worktree]`.
+   */
+  checkoutFiles(options: GitCheckoutFilesOptions): Promise<GitRestoreResult>;
   /** `git restore [--staged] [--worktree] [--source <commit>] <path>...` */
   restore(paths: string[], options?: GitRestoreOptions): Promise<GitRestoreResult>;
   /** `git reset [--soft | --mixed | --hard] [<commit>]` and `git reset [<commit>] -- <path>...` */

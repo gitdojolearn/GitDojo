@@ -221,14 +221,29 @@ describe("command router", () => {
     expect(result).toMatchObject({ ok: false, errorCode: "NOTHING_TO_COMMIT" });
   });
 
-  it("reports a missing commit message", async () => {
+  it("opens the editor for git commit without -m, and refuses a blank -m", async () => {
     await runCommandLine("git init", context);
-    await runCommandLine("git add README.md", context);
     expect(await runCommandLine("git commit", context)).toMatchObject({
+      ok: false,
+      errorCode: "NOTHING_TO_COMMIT",
+    });
+    await runCommandLine("git add README.md", context);
+    expect(await runCommandLine('git commit -m "  "', context)).toMatchObject({
       ok: false,
       output: "error: commit message is required",
       errorCode: "INVALID_ARGUMENT",
     });
+    expect(await runCommandLine("git commit", context)).toMatchObject({
+      ok: true,
+      output: "hint: Waiting for your editor to close the file...",
+      gitCommand: "commit",
+    });
+    const editor = (await context.git.snapshot()).editor;
+    expect(editor).toMatchObject({ file: "COMMIT_EDITMSG", operation: "commit" });
+    expect(editor?.content).toContain("# Changes to be committed:\n#\tnew file:   README.md");
+    expect((await context.git.closeEditor("First commit\n# ignored\n")).output).toMatch(
+      /^\[main \(root-commit\) [0-9a-f]{7}\] First commit/,
+    );
   });
 
   it("merges, reports conflicts and concludes with a plain git commit", async () => {
@@ -293,7 +308,7 @@ describe("command router", () => {
     });
     const help = await runCommandLine("help", context);
     expect(help.output).toContain(
-      'git commit [-m "<message>"] [--amend [--no-edit] [--reset-author]]',
+      'git commit [-a] [-m "<message>"] [--amend [--no-edit] [--reset-author]]',
     );
     expect(help.output).toContain("git config [--global]");
   });
@@ -312,6 +327,133 @@ describe("command router", () => {
       errorCode: "INTERNAL",
     });
     expect(result.output).not.toContain("internal detail");
+  });
+
+  describe("forms beginners copy from tutorials", () => {
+    async function firstCommit() {
+      await runCommandLine("git init", context);
+      await runCommandLine("git add README.md", context);
+      await runCommandLine('git commit -m "Initial commit"', context);
+    }
+
+    it("runs GitHub's push-an-existing-repository steps up to the push", async () => {
+      await firstCommit();
+      expect(await runCommandLine("git branch -M main", context)).toMatchObject({
+        ok: true,
+        output: "",
+        gitCommand: "branch",
+      });
+      expect((await runCommandLine("git branch -M trunk", context)).ok).toBe(true);
+      expect((await runCommandLine("git branch", context)).output).toBe("* trunk");
+      expect((await runCommandLine("git branch -m", context)).output).toBe(
+        "fatal: branch name required",
+      );
+      expect((await runCommandLine("git branch -m -d x", context)).errorCode).toBe(
+        "INVALID_ARGUMENT",
+      );
+      await runCommandLine("git branch feature", context);
+      expect((await runCommandLine("git branch -m feature login", context)).ok).toBe(true);
+      expect((await runCommandLine("git branch", context)).output).toBe("  login\n* trunk");
+    });
+
+    it("commits every tracked change with -am", async () => {
+      await firstCommit();
+      await files.writeFile(WORKSPACE, "README.md", "# Changed\n");
+      const result = await runCommandLine('git commit -am "Update README"', context);
+      expect(result.output).toMatch(/^\[main [0-9a-f]{7}\] Update README\n 1 file changed$/);
+    });
+
+    it("routes git log's graph, count, stat and patch", async () => {
+      await firstCommit();
+      await files.writeFile(WORKSPACE, "README.md", "# Changed\n");
+      await runCommandLine('git commit -am "Second"', context);
+      expect((await runCommandLine("git log --oneline -1", context)).output).toMatch(
+        /^[0-9a-f]{7} \(HEAD -> main\) Second$/,
+      );
+      expect((await runCommandLine("git log --graph --oneline", context)).output).toMatch(
+        /^\* [0-9a-f]{7} \(HEAD -> main\) Second\n\* [0-9a-f]{7} Initial commit$/,
+      );
+      expect((await runCommandLine("git log -n 1 --stat --oneline", context)).output).toContain(
+        " README.md | 2 +-",
+      );
+      expect((await runCommandLine("git log -1 -p", context)).output).toContain("+# Changed");
+      expect(await runCommandLine("git log -n many", context)).toMatchObject({
+        ok: false,
+        output: "fatal: 'many': not an integer",
+      });
+    });
+
+    it("compares commits with git diff, before or after --", async () => {
+      await firstCommit();
+      await files.writeFile(WORKSPACE, "README.md", "# Changed\n");
+      await runCommandLine('git commit -am "Second"', context);
+      for (const line of ["git diff HEAD~1", "git diff HEAD~1 HEAD", "git diff HEAD~1..HEAD"]) {
+        expect((await runCommandLine(line, context)).output).toContain("-# GitDojo\n+# Changed");
+      }
+      expect((await runCommandLine("git diff HEAD~1 -- README.md", context)).output).toContain(
+        "+# Changed",
+      );
+      expect((await runCommandLine("git diff nope", context)).errorCode).toBe("INVALID_REVISION");
+      // After `--`, a word is a path even when nothing matches it, as in Git.
+      expect(await runCommandLine("git diff -- nope", context)).toMatchObject({
+        ok: true,
+        output: "",
+      });
+    });
+
+    it("restores files with git checkout, from the index or a commit", async () => {
+      await firstCommit();
+      await files.writeFile(WORKSPACE, "README.md", "# Oops\n");
+      expect(await runCommandLine("git checkout -- README.md", context)).toMatchObject({
+        ok: true,
+        output: "",
+      });
+      expect(await files.readFile(WORKSPACE, "README.md")).toBe("# GitDojo\n");
+      await files.writeFile(WORKSPACE, "README.md", "# Oops\n");
+      expect((await runCommandLine("git checkout README.md", context)).output).toBe(
+        "Updated 1 path from the index",
+      );
+      await files.writeFile(WORKSPACE, "README.md", "# Changed\n");
+      await runCommandLine('git commit -am "Second"', context);
+      expect((await runCommandLine("git checkout HEAD~1 -- README.md", context)).ok).toBe(true);
+      expect(await files.readFile(WORKSPACE, "README.md")).toBe("# GitDojo\n");
+      expect((await runCommandLine("git checkout HEAD -- README.md", context)).ok).toBe(true);
+      // A name that is no branch, commit or file is still reported as Git does.
+      expect(await runCommandLine("git checkout nope", context)).toMatchObject({
+        ok: false,
+        output: "error: pathspec 'nope' did not match any file(s) known to git",
+        errorCode: "BRANCH_NOT_FOUND",
+      });
+      expect((await runCommandLine("git checkout a b -- README.md", context)).errorCode).toBe(
+        "INVALID_ARGUMENT",
+      );
+    });
+
+    it("refuses a word before -- that names no commit", async () => {
+      await firstCommit();
+      // Before `--`, every word must be a commit.
+      expect(await runCommandLine("git diff README.md -- other.txt", context)).toMatchObject({
+        ok: false,
+        output: "fatal: bad revision 'README.md'",
+        errorCode: "INVALID_REVISION",
+      });
+    });
+
+    it("shows a command's usage for -h, --help and git help, without running it", async () => {
+      const help = await runCommandLine("git commit -h", context);
+      expect(help.ok).toBe(true);
+      expect(help.output).toMatch(/^usage: git commit \[-a\] \[-m "<message>"\]/);
+      expect(help.output).toContain("\nOptions:\n    -m, --message <value>\n    -a, --all\n");
+      expect(help).not.toHaveProperty("gitCommand");
+      expect((await runCommandLine("git help branch", context)).output).toMatch(
+        /^usage: git branch /,
+      );
+      expect((await runCommandLine("git init --help", context)).output).toBe(
+        "usage: git init\n\nCreate an empty Git repository",
+      );
+      // Nothing ran: there is still no repository.
+      expect((await runCommandLine("git status", context)).errorCode).toBe("NOT_A_REPOSITORY");
+    });
   });
 
   describe("recovery commands", () => {

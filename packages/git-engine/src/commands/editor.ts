@@ -49,7 +49,8 @@ export async function runCloseEditor(ctx: GitContext, content: string): Promise<
   if (record.kind === "commit") {
     const result = await runCommit(ctx, {
       message,
-      amend: true,
+      amend: record.amend !== false,
+      ...(record.all ? { all: true } : {}),
       ...(record.resetAuthor ? { resetAuthor: true } : {}),
     });
     return result.ok
@@ -71,8 +72,8 @@ export async function runCloseEditor(ctx: GitContext, content: string): Promise<
 
 /**
  * The learner closed the editor without saving. An interactive rebase is aborted, exactly like
- * `git rebase --abort`; an amend or annotated tag is simply not made, as when Git gets an empty
- * message.
+ * `git rebase --abort`; a commit, amend or annotated tag is simply not made, as when Git gets an
+ * empty message.
  */
 export async function runAbortEditor(ctx: GitContext): Promise<GitEditorResult> {
   const opened = await openRecord(ctx);

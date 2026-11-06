@@ -114,3 +114,25 @@ test("amends the latest local commit and completes the amend lesson", async ({
   await run(page, 'git commit --amend -m "Add login form with validation"');
   await expect(page.getByRole("dialog")).toContainText("Lesson Complete");
 });
+
+test("git commit without -m opens the editor, then GitHub's branch -M main steps work", async ({
+  page,
+  isMobile,
+}) => {
+  await page.goto("/playground");
+  await waitForTerminal(page, isMobile);
+  const terminal = page.getByTestId("terminal");
+  await run(page, "git mv index.html home.html");
+  await run(page, "git commit");
+
+  const dialog = page.getByTestId("git-editor");
+  await expect(dialog).toContainText("COMMIT_EDITMSG");
+  await expect(dialog.getByTestId("git-editor-text")).toHaveValue(/# Changes to be committed:/);
+  await dialog.getByTestId("git-editor-text").fill("Rename the homepage\n");
+  await dialog.getByTestId("git-editor-save").click();
+  await expect(terminal).toContainText("] Rename the homepage");
+
+  await run(page, "git branch -M trunk");
+  await run(page, "git log --graph --oneline -1");
+  await expect(terminal).toContainText(/\* [0-9a-f]{7} \(HEAD -> trunk\) Rename the homepage/);
+});

@@ -41,10 +41,14 @@ await git.add(["README.md"]); // or ["."]
 await git.commit({ message: "Initial commit" }); // author defaults to GitDojo Learner
 await git.commit({ message: "Corrected message", amend: true }); // replace HEAD, preserve author/parents
 await git.commit({ message: "", amend: true, noEdit: true }); // keep HEAD's message
+await git.commit({ message: "Fix typo", all: true }); // `git commit -am`: stage tracked changes first
+await git.commit({ message: "" }); // `git commit`: opens the editor (see below)
 await git.log({ oneline: true }); // also { revision: "feature" } and { all: true }
+await git.log({ graph: true, maxCount: 5, stat: true }); // `git log --graph -5 --stat` (patch: `-p`)
 await git.showBranches(); // `git branch`
 await git.createBranch("feature/login"); // `git branch feature/login [<start-point>]`
 await git.deleteBranch("old", { force: false }); // `git branch -d old` (-D with force)
+await git.renameBranch("main", { force: true }); // `git branch -M main`; { from: "old" } renames another
 await git.switchBranch("feature/login"); // `git switch feature/login`, `git switch -`
 await git.createAndSwitchBranch("bugfix", "main~1"); // `git switch -c bugfix [<start-point>]`
 await git.detachHead("HEAD~1", { advice: false }); // `git switch --detach HEAD~1`
@@ -53,7 +57,9 @@ await git.merge("feature/login"); // fast-forward or merge commit; { noFastForwa
 await git.abortMerge(); // `git merge --abort`
 
 await git.diff({ staged: false, paths: [] }); // `git diff [--staged] [<path>...]`
+await git.diff({ revisions: ["main...feature"] }); // `git diff HEAD~1`, `A B`, `A..B`, `A...B`
 await git.restore(["a.txt"], { staged: true }); // `git restore [--staged] [--source <rev>] <path>`
+await git.checkoutFiles({ paths: ["a.txt"], source: "HEAD~1", separated: true }); // `git checkout HEAD~1 -- a.txt`
 await git.rm(["a.txt"], { cached: true }); // `git rm [--cached] [-r] [-f] <path>`
 await git.reset({ mode: "hard", commit: "HEAD~1" }); // `git reset --hard HEAD~1`
 await git.reset({ paths: ["a.txt"] }); // `git reset a.txt` (unstage)
@@ -165,9 +171,25 @@ kept in `cause` for debugging and is never rendered.
   also stages deletions under it, like modern Git (`git add .` records removed files).
 - `status` mirrors Git's long format, including its hints.
 - `commit` prints `[main (root-commit) abc1234] message`, the number of files changed, and
-  `create mode` / `delete mode` lines.
+  `create mode` / `delete mode` lines. Without `-m` (an empty `message`) it opens the editor on
+  `COMMIT_EDITMSG` with Git's status comments, once there is something to commit; a merge or
+  other operation being concluded still uses its prepared message, and a blank `-m` is refused.
+  `-a` (`all`) stages edits and deletions of tracked files just before committing (when the
+  editor is saved, if one opens), never new files.
 - `log` shows decorations (`HEAD -> main`) and supports `--oneline`. Dates use the author's
-  recorded timezone.
+  recorded timezone. `-n` / `-<number>` limits the count; `--stat` and `-p` add each commit's
+  diffstat (without mode lines) or patch against its parent, and nothing for merges, as in Git.
+  `--graph` lists commits in topological order and draws Git's lanes (`*`, `|`, `|\`, `|/`) in
+  front of every line (`src/engine/log-graph.ts`); several lanes joining at once get one diagonal
+  each rather than Git's longer routing.
+- `branch -m [<old>] <new>` renames the current branch (or `old`), moving its reflog (with a
+  `Branch: renamed ...` entry) and upstream. It works on an unborn branch, renaming to the same
+  name does nothing (so `git branch -M main` always works), and `-M` replaces another branch with
+  the new name, but never the one checked out.
+- `diff` compares against commits too: `git diff <commit>` (working tree, or the staging area with
+  `--staged`), `git diff <a> <b>` / `<a>..<b>` (two trees) and `<a>...<b>` (from their merge
+  base). Words before `--` are commits while they name one, then paths; a word that is neither is
+  refused with Git's `ambiguous argument` message.
 - `git branch` lists branches sorted by name with `*` on the current one. An unborn branch is not
   listed (it does not exist until its first commit), but `listBranches()` and the snapshot still
   report it so the UI can show it. Creating a branch before the first commit fails with
@@ -179,7 +201,10 @@ kept in `cause` for debugging and is never rendered.
 - `switch -c` on an unborn branch just repoints HEAD, so the first commit lands on the new name.
 - `git checkout <branch>`, `git checkout -b <name> [<start>]` and `git checkout <commit>` are
   routed to the same methods for comparison with older tutorials; an unknown name is reported as
-  a pathspec, as Git does. Lessons teach `git switch`.
+  a pathspec, as Git does. Lessons teach `git switch`. `checkoutFiles` is
+  `git checkout [<commit>] [--] <path>...`: `git restore`, or with a commit
+  `git restore --source <commit> --staged --worktree`. Without `--` it prints Git's
+  `Updated N paths from the index` (or `from <tree>`); with `--` it is silent, as in Git.
 - The snapshot's `allCommits` holds every commit reachable from any branch or HEAD, children before
   parents, so the graph can show branches you are not on.
 
@@ -287,8 +312,8 @@ wait is **state**: `.git/GITDOJO_EDITOR.json` records which file Git opened, its
 happens once it is saved (Git's own `git-rebase-todo` is written next to it). The snapshot exposes
 it as `editor` (`{ file, purpose: "todo" | "message", operation, content, error? }`) and the web
 app shows it in a dialog; the terminal command stays busy until the learner closes it.
-`operation` is `rebase`, `commit` (`git commit --amend` without `-m` or `--no-edit`, editing
-`COMMIT_EDITMSG`) or `tag` (`git tag -a` without `-m`, editing `TAG_EDITMSG`). `closeEditor`
+`operation` is `rebase`, `commit` (`git commit`, or `git commit --amend` without `-m` or
+`--no-edit`, editing `COMMIT_EDITMSG`) or `tag` (`git tag -a` without `-m`, editing `TAG_EDITMSG`). `closeEditor`
 carries the operation on with the saved text; `abortEditor` is closing without saving:
 `git rebase --abort` for a rebase, and no commit or tag otherwise (`Aborting commit due to empty
 commit message.` / `fatal: no tag message?`). An empty message keeps the editor open with the

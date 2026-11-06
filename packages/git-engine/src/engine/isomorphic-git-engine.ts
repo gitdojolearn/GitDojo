@@ -4,6 +4,7 @@ import {
   readBranches,
   runCreateBranch,
   runDeleteBranch,
+  runRenameBranch,
   runShowBranches,
 } from "../commands/branch";
 import { runClone, runSetupCloneSource } from "../commands/clone";
@@ -29,7 +30,7 @@ import { runRemoteCommand } from "../commands/remote-config";
 import { runCreateTag, runDeleteTag, runListTags } from "../commands/tag";
 import { runReflog } from "../commands/reflog";
 import { runReset } from "../commands/reset";
-import { runRestore } from "../commands/restore";
+import { runCheckoutFiles, runRestore } from "../commands/restore";
 import { runRm } from "../commands/rm";
 import { runAbortMerge, runMerge } from "../commands/merge";
 import { readSnapshot } from "../commands/snapshot";
@@ -54,6 +55,9 @@ import {
   type GitAddResult,
   type GitBranchCreateResult,
   type GitBranchDeleteResult,
+  type GitBranchRenameOptions,
+  type GitBranchRenameResult,
+  type GitCheckoutFilesOptions,
   type GitDetachOptions,
   type GitDiffOptions,
   type GitDiffResult,
@@ -186,6 +190,10 @@ export class IsomorphicGitEngine implements GitEngine {
     return mutating(this.ctx, () => runDeleteBranch(this.ctx, name, options));
   }
 
+  renameBranch(name: string, options?: GitBranchRenameOptions): Promise<GitBranchRenameResult> {
+    return mutating(this.ctx, () => runRenameBranch(this.ctx, name, options));
+  }
+
   switchBranch(name: string): Promise<GitSwitchResult> {
     return mutating(this.ctx, () => runSwitch(this.ctx, name, { create: false }));
   }
@@ -212,6 +220,10 @@ export class IsomorphicGitEngine implements GitEngine {
 
   restore(paths: string[], options?: GitRestoreOptions): Promise<GitRestoreResult> {
     return mutating(this.ctx, () => runRestore(this.ctx, paths, options));
+  }
+
+  checkoutFiles(options: GitCheckoutFilesOptions): Promise<GitRestoreResult> {
+    return mutating(this.ctx, () => runCheckoutFiles(this.ctx, options));
   }
 
   reset(options?: GitResetOptions): Promise<GitResetResult> {

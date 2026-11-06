@@ -33,7 +33,7 @@ function describe(editor: PendingEditorState): { help: string; label: string; ab
 }
 
 /**
- * The editor Git opens for `git rebase -i`, `git commit --amend` and `git tag -a`, as a dialog.
+ * The editor Git opens for `git rebase -i`, `git commit` (and `--amend`) and `git tag -a`, as a dialog.
  * The terminal command stays busy until the learner chooses: **Save and close** hands the text to
  * Git; the other button closes it without saving (`git rebase --abort`, or no commit or tag).
  * Escape and clicking outside do nothing, so an edited file is never thrown away by accident.

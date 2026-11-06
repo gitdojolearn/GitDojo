@@ -17,6 +17,43 @@ function errorOf(raw: string): { code: ParseErrorCode; message: string } {
 }
 
 describe("parseCommand", () => {
+  describe("forms beginners copy from tutorials", () => {
+    it("bundles -a with -m, as in git commit -am", () => {
+      expect(parsed('git commit -am "Fix typo"').flags).toEqual({ a: true, m: "Fix typo" });
+      expect(parsed('git commit --all -m "Fix typo"').flags).toEqual({ a: true, m: "Fix typo" });
+    });
+
+    it("reads -M and -m on git branch as rename", () => {
+      expect(parsed("git branch -M main")).toMatchObject({ flags: { M: true }, args: ["main"] });
+      expect(parsed("git branch -m old new")).toMatchObject({
+        flags: { m: true },
+        args: ["old", "new"],
+      });
+    });
+
+    it("reads -<number>, -n and --max-count as git log's count", () => {
+      expect(parsed("git log -3 --oneline").flags).toEqual({ n: "3", oneline: true });
+      expect(parsed("git log -n 2").flags).toEqual({ n: "2" });
+      expect(parsed("git log --max-count=5 --graph").flags).toEqual({ n: "5", graph: true });
+      expect(parsed("git log -p --stat").flags).toEqual({ p: true, stat: true });
+    });
+
+    it("turns -h, --help and git help <command> into a help request", () => {
+      for (const raw of ["git commit -h", "git commit --help", "git help commit"]) {
+        expect(parsed(raw)).toMatchObject({ command: "commit", help: true, args: [], flags: {} });
+      }
+      // -h wins even over arguments the command would refuse.
+      expect(parsed("git init a b -h")).toMatchObject({ command: "init", help: true });
+      // A value is never a help flag.
+      expect(parsed("git commit -m --help").flags).toEqual({ m: "--help" });
+      expect(errorOf("git help frob")).toEqual({
+        code: "UNSUPPORTED_GIT_COMMAND",
+        message: "git: 'frob' is not a git command.",
+      });
+      expect(errorOf("git help").code).toBe("MISSING_GIT_COMMAND");
+    });
+  });
+
   it("parses git init", () => {
     expect(parsed("git init")).toEqual({
       program: "git",
@@ -184,7 +221,7 @@ describe("parseCommand", () => {
       expect(errorOf("git branch a b c")).toEqual({
         code: "UNEXPECTED_ARGUMENT",
         message:
-          "error: unexpected argument 'c'\nusage: git branch [-r | -a] [-v] [-d | -D] [<name> [<start-point>]]",
+          "error: unexpected argument 'c'\nusage: git branch [-r | -a] [-v] [-d | -D] [-m | -M] [<name> [<start-point> | <new-name>]]",
       });
       expect(errorOf("git switch a b").code).toBe("UNEXPECTED_ARGUMENT");
     });
@@ -206,7 +243,9 @@ describe("parseCommand", () => {
     });
 
     it("rejects unknown flags", () => {
-      expect(errorOf("git commit -am 'x'").code).toBe("UNKNOWN_FLAG");
+      expect(errorOf("git commit -xm 'x'").code).toBe("UNKNOWN_FLAG");
+      // A number is a count only where the command has one.
+      expect(errorOf("git branch -3").code).toBe("UNKNOWN_FLAG");
       expect(errorOf("git status --porcelain").message).toContain("unknown option '--porcelain'");
     });
 
