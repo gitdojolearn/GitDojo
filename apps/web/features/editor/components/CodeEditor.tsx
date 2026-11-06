@@ -3,6 +3,7 @@
 import Editor, { loader } from "@monaco-editor/react";
 import type * as MonacoApi from "monaco-editor";
 import { useEffect, useRef } from "react";
+import { useSettings } from "@/features/settings";
 import { useTheme } from "@/features/theme";
 
 // Monaco is served from GitDojo itself (copied to public/monaco at build time), never a CDN.
@@ -99,6 +100,7 @@ export function CodeEditor({
   onBlur,
 }: CodeEditorProps) {
   const theme = useTheme();
+  const { editorFontSize, editorWordWrap } = useSettings();
   const handlers = useRef({ onSave, onBlur });
   useEffect(() => {
     handlers.current = { onSave, onBlur };
@@ -135,8 +137,9 @@ export function CodeEditor({
         readOnly,
         readOnlyMessage: { value: "This lesson's files are read-only." },
         fontFamily: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace',
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: editorFontSize,
+        lineHeight: Math.round(editorFontSize * 1.55),
+        wordWrap: editorWordWrap ? "on" : "off",
         lineNumbers: "on",
         minimap: { enabled: false },
         scrollBeyondLastLine: false,

@@ -95,6 +95,8 @@ verification below 250 ms in the Node test suite when adding larger lesson fixtu
 | `certification.spec.ts`           | The certification track: every requirement listed in order with working links and no invented progress, the completion-certificate wording, the navigation and dashboard entry points (signed-out sign-in path in `auth-flow.spec.ts`; the page is also scanned with axe in both themes)                                             |
 | `practice.spec.ts`                | Practice mode: topic filter, a task solved unguided (no hints, "Check my work"), the dashboard's practice stat and skill; Surprise me; a 404 for an unknown task                                                                                                                                                                     |
 | `git-workflows.spec.ts`           | Interactive rebase through the Git editor dialog (fixup, drop, reword), aborting from the editor, the simulated remote (rejected push, `git pull --rebase`, push), tagging a release                                                                                                                                                 |
+| `ui-polish.spec.ts`               | The command palette, a command reference page, Try in Playground, animation speed and the System theme from Settings, terminal settings in a lesson, the 404 page, links between docs, resizing workspace columns from the keyboard, the reset confirmation                                                                          |
+| `visual.spec.ts`                  | Screenshot comparisons in both themes at desktop and phone width (Linux only; see [Screenshot tests](#screenshot-tests))                                                                                                                                                                                                             |
 | `accessibility.spec.ts`           | axe WCAG 2.1 A/AA scans of every main page and dialog (an open adaptive hint, the practice workspace, the Git editor dialog), focus trapping and return, mobile navigation                                                                                                                                                           |
 | `auth.spec.ts`                    | Without account configuration (as in CI): public routes stay anonymous, account routes fall back safely, header states (mocked session endpoint), keyboard account menu, axe scans, progress across sign-in and sign-out                                                                                                             |
 | `auth-flow.spec.ts`               | The real SDK sign-up/sign-in/sign-out flow against a local mock OpenID Connect provider (`e2e/mock-idp`), on a second server with test-only values: return to the intended page, reload, `/account`, cancellation, forged cookies                                                                                                    |
@@ -112,6 +114,28 @@ gets a fresh browser context (empty IndexedDB and localStorage). Before reloadin
 page right after activity, tests wait for `<html data-progress="saved">`, which the app sets once
 progress writes have landed. The full suite passed three times in a row (`--repeat-each=3`, 222
 runs) with no flakes.
+
+### Screenshot tests
+
+`e2e/visual.spec.ts` compares the course list, Settings, a command page, the docs index, the 404
+page and the lesson workspace with committed screenshots, in both themes, on the `chromium` and
+`mobile` projects. Font rendering differs between operating systems, so the baselines
+(`e2e/visual.spec.ts-snapshots/*-linux.png`) are rendered in the same Playwright image CI uses,
+and the spec skips anywhere but Linux.
+
+After an intended visual change, render new baselines in that image and commit them:
+
+```bash
+docker run --rm --platform linux/amd64 -v "$PWD":/repo -w /repo \
+  -v gd_node_modules:/repo/node_modules -v gd_web_node_modules:/repo/apps/web/node_modules \
+  mcr.microsoft.com/playwright:v1.64.0-noble bash -lc '
+    npm i -g pnpm@10.34.5 && pnpm install --frozen-lockfile && pnpm --filter @gitdojo/web build &&
+    cd apps/web && pnpm exec playwright test visual --project=chromium --project=mobile --update-snapshots'
+```
+
+Each package's `node_modules` also needs its own volume (`-v gd_<package>:/repo/packages/<package>/node_modules`),
+so the container's Linux installs never replace your own. A failing comparison in CI uploads the
+expected, actual and diff images with the browser report.
 
 ## Accessibility review
 

@@ -18,6 +18,8 @@ import { GitEditorDialog } from "./GitEditorDialog";
 import { WorkspaceError } from "./WorkspaceError";
 import { WorkspaceFilePanels } from "./WorkspaceFilePanels";
 import { WorkbenchPanel } from "./WorkbenchPanel";
+import { ResizeHandle } from "./ResizeHandle";
+import { useResizableColumns } from "../hooks/use-resizable-columns";
 import { WorkspaceTopbar } from "./WorkspaceTopbar";
 
 const BANNER = terminalBanner(
@@ -55,6 +57,7 @@ export function LessonWorkspace({ lesson, course, challenge }: LessonWorkspacePr
     completionKind: challenge ? "challenge" : "lesson",
   });
   const terminalRef = useRef<TerminalHandle>(null);
+  const columns = useResizableColumns("lesson", [26, 44, 30]);
   const [tab, setTab] = useState<WorkspaceTab>("lesson");
   const executor = useMemo(() => createTerminalExecutor(execute), [execute]);
   const files = useMemo<WorkspaceFileActions>(
@@ -128,10 +131,11 @@ export function LessonWorkspace({ lesson, course, challenge }: LessonWorkspacePr
         <WorkspaceError details={errorDetails} onRetry={retry} />
       ) : (
         <main
+          style={columns.style}
           className={cn(
             "grid flex-1 gap-3 p-3 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)]",
             "md:grid-cols-2",
-            "lg:min-h-0 lg:grid-cols-[26fr_44fr_30fr] lg:grid-rows-[minmax(0,1fr)_minmax(200px,32%)]",
+            "lg:min-h-0 lg:grid-cols-[var(--gd-cols)] lg:grid-rows-[minmax(0,1fr)_minmax(200px,32%)] lg:gap-x-0",
           )}
         >
           <LessonPanel
@@ -143,6 +147,13 @@ export function LessonWorkspace({ lesson, course, challenge }: LessonWorkspacePr
             onGoToTerminal={goToTerminal}
             className={cn(visibleOn("lesson"), "md:h-[480px] lg:h-auto")}
           />
+          <ResizeHandle
+            index={0}
+            sizes={columns.sizes}
+            onChange={columns.setSizes}
+            onReset={columns.reset}
+            label="Resize the lesson and terminal panels"
+          />
           <WorkbenchPanel
             executor={executor}
             ready={status === "ready"}
@@ -153,6 +164,13 @@ export function LessonWorkspace({ lesson, course, challenge }: LessonWorkspacePr
             terminalFooter={<ErrorExplanation spoilerFree={lessonTypeOf(lesson) === "challenge"} />}
             className={cn(visibleOn("terminal"), "h-[calc(100dvh-10rem)] md:h-[480px] lg:h-auto")}
           />
+          <ResizeHandle
+            index={1}
+            sizes={columns.sizes}
+            onChange={columns.setSizes}
+            onReset={columns.reset}
+            label="Resize the terminal and graph panels"
+          />
           <RepositoryGraphPanel
             className={cn(
               visibleOn("graph"),
@@ -162,7 +180,7 @@ export function LessonWorkspace({ lesson, course, challenge }: LessonWorkspacePr
           <div
             className={cn(
               visibleOn("files"),
-              "grid gap-3 md:col-span-2 md:grid-cols-3 lg:col-span-3 lg:min-h-0",
+              "grid gap-3 md:col-span-2 md:grid-cols-3 lg:col-span-5 lg:min-h-0",
             )}
           >
             <WorkspaceFilePanels />

@@ -8,6 +8,7 @@ import {
   PanelDescription,
   PanelHeader,
   PanelTitle,
+  toast,
   Tooltip,
 } from "@gitdojo/ui";
 import { Check, Copy, Eraser, SquareTerminal } from "lucide-react";
@@ -42,6 +43,11 @@ export function TerminalActions({ handleRef }: { handleRef: RefObject<TerminalHa
       }, 1500);
     } catch (error) {
       console.warn("[gitdojo] could not copy terminal output", error);
+      toast({
+        title: "Couldn't copy the output.",
+        description: "Your browser blocked the clipboard. Select the text and copy it instead.",
+        tone: "danger",
+      });
     }
   };
 

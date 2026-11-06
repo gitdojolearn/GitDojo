@@ -5,7 +5,9 @@ import { type ContentRef } from "@gitdojo/progress";
 import { lessonTypeOf, type LessonDefinition } from "@gitdojo/shared-types";
 import { Badge, cn, Panel, PanelBody, PanelFooter, PanelHeader, PanelTitle } from "@gitdojo/ui";
 import { BookOpen, Flag, Target } from "lucide-react";
+import { useMemo } from "react";
 import { formatLessonNumber, type LessonNeighbors, LessonPager } from "@/features/course";
+import { usePaletteActions, type PaletteAction } from "@/features/palette";
 import { useLessonStore } from "../state/use-lesson-store";
 import { CompletionCard } from "./CompletionCard";
 import { LessonContent } from "./content/LessonContent";
@@ -74,6 +76,40 @@ export function LessonPanel({
   const currentIndex = lesson.objectives.findIndex((objective) => objective.id === currentId);
   const current = currentIndex === -1 ? undefined : lesson.objectives[currentIndex];
   const done = progress?.completed ?? false;
+
+  // ⌘/ (Ctrl+/) and the command palette reveal the next hint, exactly as the hint panel's own
+  // button does: the answer still asks for confirmation there.
+  const revealed = currentId ? (hintStates[currentId]?.revealedHints ?? 0) : 0;
+  const nextLevel = hints[revealed]?.level;
+  const paletteActions = useMemo<PaletteAction[]>(() => {
+    if (!currentId || done || hints.length === 0) return [];
+    return [
+      {
+        id: "lesson-next-hint",
+        group: challenge ? "This challenge" : "This lesson",
+        label:
+          nextLevel === undefined
+            ? "All hints are shown"
+            : nextLevel === 3
+              ? "Show the answer"
+              : revealed === 0
+                ? "Show a hint"
+                : "Show the next hint",
+        hint: `${String(revealed)} of ${String(hints.length)} hints shown`,
+        keywords: "help stuck clue hint",
+        shortcut: { key: "/", mod: true },
+        disabled: nextLevel === undefined,
+        run: () => {
+          document
+            .querySelector<HTMLButtonElement>(
+              '[data-testid="hint-panel"] [data-testid="reveal-hint"]',
+            )
+            ?.click();
+        },
+      },
+    ];
+  }, [currentId, done, hints.length, revealed, nextLevel, challenge]);
+  usePaletteActions(paletteActions);
 
   const goal = lesson.goal ? (
     <div key="goal" className="rounded-md border border-border-subtle bg-panel p-3">

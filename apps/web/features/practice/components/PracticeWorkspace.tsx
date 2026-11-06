@@ -14,6 +14,7 @@ import { ErrorExplanation } from "@/features/errors";
 import { recordCompletion, useSolvedPractice } from "@/features/progress";
 import { RepositoryGraphPanel } from "@/features/repository";
 import { createTerminalExecutor, terminalBanner, type TerminalHandle } from "@/features/terminal";
+import { PaletteButton } from "@/features/palette";
 import { ThemeToggle } from "@/features/theme";
 import {
   GitEditorDialog,
@@ -25,6 +26,8 @@ import {
   WorkbenchPanel,
   WorkspaceError,
   WorkspaceFilePanels,
+  ResizeHandle,
+  useResizableColumns,
 } from "@/features/workspace";
 import { practiceHref } from "../services/practice-navigation";
 import { PracticePanel } from "./PracticePanel";
@@ -66,6 +69,7 @@ export function PracticeWorkspace({
   const { status, errorDetails, snapshot, execute, files, reset, retry, exportCompletionEvidence } =
     usePracticeSession(lesson, { completionKind: "practice" });
   const terminalRef = useRef<TerminalHandle>(null);
+  const columns = useResizableColumns("lesson", [26, 44, 30]);
   const executor = useMemo(() => createTerminalExecutor(execute), [execute]);
   const [tab, setTab] = useState<PracticeTab>("task");
   const ready = status === "ready";
@@ -132,8 +136,14 @@ export function PracticeWorkspace({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <HelpDialog />
-          <ResetLessonButton confirm={false} disabled={!ready} onReset={startOver} />
+          <ResetLessonButton
+            confirm={false}
+            disabled={!ready}
+            onReset={startOver}
+            doneMessage="Task reset. The repository is back to its starting state."
+          />
           <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border" />
+          <PaletteButton compact />
           <ThemeToggle />
           <AccountControls compact />
         </div>
@@ -144,10 +154,11 @@ export function PracticeWorkspace({
         <WorkspaceError details={errorDetails} onRetry={retry} />
       ) : (
         <main
+          style={columns.style}
           className={cn(
             "grid flex-1 gap-3 p-3 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)]",
             "md:grid-cols-2",
-            "lg:min-h-0 lg:grid-cols-[26fr_44fr_30fr] lg:grid-rows-[minmax(0,1fr)_minmax(200px,32%)]",
+            "lg:min-h-0 lg:grid-cols-[var(--gd-cols)] lg:grid-rows-[minmax(0,1fr)_minmax(200px,32%)] lg:gap-x-0",
           )}
         >
           <PracticePanel
@@ -160,6 +171,13 @@ export function PracticeWorkspace({
             onRetry={() => void startOver()}
             className={cn(visibleOn("task"), "md:h-[480px] lg:h-auto")}
           />
+          <ResizeHandle
+            index={0}
+            sizes={columns.sizes}
+            onChange={columns.setSizes}
+            onReset={columns.reset}
+            label="Resize the task and terminal panels"
+          />
           <WorkbenchPanel
             executor={executor}
             ready={ready}
@@ -168,6 +186,13 @@ export function PracticeWorkspace({
             files={files}
             terminalFooter={<ErrorExplanation spoilerFree />}
             className={cn(visibleOn("terminal"), "h-[calc(100dvh-10rem)] md:h-[480px] lg:h-auto")}
+          />
+          <ResizeHandle
+            index={1}
+            sizes={columns.sizes}
+            onChange={columns.setSizes}
+            onReset={columns.reset}
+            label="Resize the terminal and graph panels"
           />
           <RepositoryGraphPanel
             className={cn(
@@ -178,7 +203,7 @@ export function PracticeWorkspace({
           <div
             className={cn(
               visibleOn("files"),
-              "grid gap-3 md:col-span-2 md:grid-cols-3 lg:col-span-3 lg:min-h-0",
+              "grid gap-3 md:col-span-2 md:grid-cols-3 lg:col-span-5 lg:min-h-0",
             )}
           >
             <WorkspaceFilePanels />

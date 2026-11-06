@@ -2,18 +2,22 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 
-import { TooltipProvider } from "@gitdojo/ui";
+import { Toaster, TooltipProvider } from "@gitdojo/ui";
 import { type Metadata, type Viewport } from "next";
 import { type ReactNode } from "react";
 import releaseInfo from "@/lib/release-info.json";
+import { CommandPalette } from "@/features/palette/components/CommandPalette";
 import { ProgressProvider } from "@/features/progress/components/ProgressProvider";
 import { ReleaseBanner } from "@/features/releases/components/ReleaseBanner";
+import { SettingsSync } from "@/features/settings/components/SettingsSync";
+import { SETTINGS_SCRIPT } from "@/features/settings/services/settings-script";
 import { ThemeSync } from "@/features/theme/components/ThemeSync";
 import { THEME_COLORS } from "@/features/theme/services/theme";
 import { THEME_SCRIPT } from "@/features/theme/services/theme-script";
 import { loadProgressCatalog } from "@/lib/progress-catalog";
 import { SITE } from "@/lib/site";
 import { SPLASH_SCRIPT } from "@/components/landing/splash-script";
+import { paletteLinks } from "./palette-links";
 
 export const metadata: Metadata = {
   // Absolute base for social preview images (app/opengraph-image.png). Set in deployment.
@@ -39,14 +43,19 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Animation speed (Settings), also before the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: SETTINGS_SCRIPT }} />
         {/* Decides before the first paint whether the landing page opens with its intro. */}
         <script dangerouslySetInnerHTML={{ __html: SPLASH_SCRIPT }} />
       </head>
       <body className="min-h-dvh bg-app text-fg">
         <ThemeSync />
+        <SettingsSync />
         <ReleaseBanner />
         <TooltipProvider>{children}</TooltipProvider>
         <ProgressProvider catalog={catalog} />
+        <CommandPalette links={paletteLinks(catalog)} />
+        <Toaster />
       </body>
     </html>
   );

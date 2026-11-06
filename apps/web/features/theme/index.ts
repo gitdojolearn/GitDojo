@@ -2,5 +2,12 @@
 // The root layout imports ThemeSync and THEME_SCRIPT by path.
 
 export { ThemeToggle } from "./components/ThemeToggle";
-export { useTheme } from "./hooks/use-theme";
-export { applyTheme, setTheme, THEME_COLORS, type Theme } from "./services/theme";
+export { useTheme, useThemePreference } from "./hooks/use-theme";
+export {
+  applyTheme,
+  setTheme,
+  THEME_COLORS,
+  THEME_PREFERENCES,
+  type Theme,
+  type ThemePreference,
+} from "./services/theme";

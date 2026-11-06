@@ -10,6 +10,7 @@ import {
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearToasts, Toaster } from "@gitdojo/ui";
 import { Dashboard } from "./components/Dashboard";
 import {
   initProgress,
@@ -170,7 +171,13 @@ describe("Dashboard", () => {
       type: "complete",
       content: { kind: "lesson", id: "git-init", type: "interactive" },
     });
-    render(<Dashboard catalog={CATALOG} />);
+    clearToasts();
+    render(
+      <>
+        <Dashboard catalog={CATALOG} />
+        <Toaster />
+      </>,
+    );
     expect(screen.getByTestId("stat-xp")).toHaveTextContent("50");
 
     const user = userEvent.setup();
@@ -186,7 +193,8 @@ describe("Dashboard", () => {
       expect(screen.getByTestId("stat-xp")).toHaveTextContent("0");
     });
     expect(screen.getByTestId("stat-playground")).toHaveTextContent("0");
-    expect(screen.getByText("Learning progress reset.")).toHaveAttribute("role", "status");
+    // Confirmed on screen, in a toast that assistive technology announces.
+    expect(await screen.findByTestId("toast")).toHaveTextContent("Learning progress reset.");
   });
 });
 

@@ -73,6 +73,16 @@ export class TerminalController {
     this.start(banner);
   }
 
+  /**
+   * Puts `text` on the prompt without running it, so the learner can read it and press Enter
+   * (a "Try in Playground" link). Ignored while a command runs or before the first prompt.
+   */
+  setInput(text: string): void {
+    if (!this.active || this.busy) return;
+    const buffer = text.replace(/[\r\n]+/g, " ");
+    this.redraw({ buffer, cursor: buffer.length });
+  }
+
   clearScreen(): void {
     this.surface.clear();
     // `clear` keeps the cursor row; redraw the prompt from its first column.

@@ -2,6 +2,7 @@
 
 import { type Terminal as XTerm } from "@xterm/xterm";
 import { useEffect, useImperativeHandle, useRef, type Ref, type RefObject } from "react";
+import { useSettings } from "@/features/settings";
 import { useTheme } from "@/features/theme";
 import { terminalTheme } from "../services/ansi";
 import { TerminalController } from "../services/terminal-controller";
@@ -13,6 +14,8 @@ export interface TerminalHandle {
   focus(): void;
   clear(): void;
   restart(banner?: string): void;
+  /** Types `text` at the prompt without running it. */
+  setInput(text: string): void;
   /** Visible buffer contents as plain text. */
   readText(): string;
 }
@@ -55,6 +58,9 @@ export function useTerminal({
   const completionContextRef = useRef(getCompletionContext);
   const theme = useTheme();
   const themeRef = useRef(theme);
+  const settings = useSettings();
+  const settingsRef = useRef(settings);
+  const fitRef = useRef<(() => void) | null>(null);
 
   // Prints the banner and first prompt once both the terminal and the workspace are ready.
   const startIfReady = () => {
@@ -78,6 +84,18 @@ export function useTerminal({
     if (terminal) terminal.options.theme = terminalTheme(theme);
   }, [theme]);
 
+  // Settings → Terminal apply to the open terminal; a new font size or spacing refits the grid.
+  useEffect(() => {
+    settingsRef.current = settings;
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    terminal.options.fontSize = settings.terminalFontSize;
+    terminal.options.lineHeight = settings.terminalLineHeight;
+    terminal.options.cursorStyle = settings.terminalCursorStyle;
+    terminal.options.cursorBlink = settings.terminalCursorBlink;
+    fitRef.current?.();
+  }, [settings]);
+
   useEffect(() => {
     // An object, not a boolean, so TypeScript does not narrow it across the `await` below.
     const lifecycle = { disposed: false };
@@ -95,10 +113,10 @@ export function useTerminal({
 
       const terminal = new Terminal({
         fontFamily: FONT_FAMILY,
-        fontSize: 13,
-        lineHeight: 1.35,
-        cursorBlink: true,
-        cursorStyle: "block",
+        fontSize: settingsRef.current.terminalFontSize,
+        lineHeight: settingsRef.current.terminalLineHeight,
+        cursorBlink: settingsRef.current.terminalCursorBlink,
+        cursorStyle: settingsRef.current.terminalCursorStyle,
         convertEol: false,
         scrollback: 2000,
         theme: terminalTheme(themeRef.current),
@@ -117,6 +135,7 @@ export function useTerminal({
         if (container.clientWidth > 0 && container.clientHeight > 0) fit.fit();
       };
       safeFit();
+      fitRef.current = safeFit;
       const observer = new ResizeObserver(safeFit);
       observer.observe(container);
 
@@ -161,6 +180,7 @@ export function useTerminal({
         terminal.dispose();
         terminalRef.current = null;
         controllerRef.current = null;
+        fitRef.current = null;
         startedRef.current = false;
       };
       startIfReady();
@@ -177,6 +197,7 @@ export function useTerminal({
     focus: () => terminalRef.current?.focus(),
     clear: () => controllerRef.current?.clearScreen(),
     restart: (nextBanner) => controllerRef.current?.restart(nextBanner ?? bannerRef.current),
+    setInput: (text) => controllerRef.current?.setInput(text),
     readText: () => {
       const terminal = terminalRef.current;
       if (!terminal) return "";

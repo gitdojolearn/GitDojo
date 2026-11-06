@@ -11,6 +11,8 @@ import {
   Kbd,
 } from "@gitdojo/ui";
 import { CircleHelp } from "lucide-react";
+import { useMemo, useState } from "react";
+import { usePaletteActions, type PaletteAction } from "@/features/palette";
 
 const SHORTCUTS = [
   { keys: ["Tab"], label: "Complete Git commands, flags, branches and paths" },
@@ -31,8 +33,26 @@ export function HelpDialog() {
     ...Object.entries(BUILTIN_PROGRAMS).map(([usage, summary]) => ({ usage, summary })),
   ];
 
+  const [open, setOpen] = useState(false);
+  const paletteActions = useMemo<PaletteAction[]>(
+    () => [
+      {
+        id: "workspace-help",
+        group: "This page",
+        label: "Terminal help",
+        hint: "Supported commands and keyboard shortcuts",
+        keywords: "help commands shortcuts keys",
+        run: () => {
+          setOpen(true);
+        },
+      },
+    ],
+    [],
+  );
+  usePaletteActions(paletteActions);
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm">
           <CircleHelp /> <span className="max-sm:sr-only">Help</span>

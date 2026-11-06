@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LogoMark } from "@/components/site/logo";
 import { AccountControls } from "@/features/auth";
+import { PaletteButton } from "@/features/palette";
 import { ThemeToggle } from "@/features/theme";
 import { ConflictBanner, ConflictEditorDialog, useConflictEditorStore } from "@/features/conflicts";
 import { EditorPanel, useEditorStore } from "@/features/editor";
@@ -34,6 +35,8 @@ import {
   ResetLessonButton,
   WorkspaceError,
   WorkspaceFilePanels,
+  ResizeHandle,
+  useResizableColumns,
 } from "@/features/workspace";
 import { usePlaygroundSession } from "../hooks/use-playground-session";
 import { usePlaygroundStore } from "../state/use-playground-store";
@@ -67,6 +70,7 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
   const playground = usePlaygroundSession(scenarios);
   const { status, execute, files } = playground;
   const terminalRef = useRef<TerminalHandle>(null);
+  const columns = useResizableColumns("playground", [38, 32, 30]);
   const executor = useMemo(() => createTerminalExecutor(execute), [execute]);
   const getCompletionContext = useCallback(
     () => completionContextFromRepository(useRepositoryStore.getState().repositoryState),
@@ -89,6 +93,24 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
     const stamp = snapshot.exportedAt.slice(0, 19).replace(/[:T]/g, "-");
     download(`gitdojo-playground-${stamp}.json`, `${JSON.stringify(snapshot, null, 2)}\n`);
   };
+
+  // "Try in Playground" (/playground?try=git+status): once the terminal is ready, the command
+  // waits on the prompt for the learner to read and run. Only Git commands, and only once.
+  useEffect(() => {
+    if (!ready) return;
+    const url = new URL(window.location.href);
+    const command = url.searchParams.get("try")?.trim() ?? "";
+    if (!command) return;
+    url.searchParams.delete("try");
+    window.history.replaceState(window.history.state, "", url);
+    if (!/^git [^\r\n]{1,200}$/.test(command)) return;
+    // The prompt is printed as the session becomes ready; type after it.
+    window.setTimeout(() => {
+      setTab("terminal");
+      terminalRef.current?.setInput(command);
+      terminalRef.current?.focus();
+    }, 0);
+  }, [ready]);
 
   // On phones, opening a file (e.g. from the Working Tree) shows the editor.
   useEffect(
@@ -166,8 +188,10 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
             title="Reset the playground?"
             description={`The repository goes back to the start of "${scenario?.title ?? "New repository"}". Everything you changed is discarded.`}
             confirmLabel="Reset repository"
+            doneMessage="Playground reset. The repository is back to its starting point."
           />
           <span aria-hidden="true" className="mx-1 h-5 w-px shrink-0 bg-border" />
+          <PaletteButton compact />
           <ThemeToggle />
           <AccountControls compact />
         </div>
@@ -178,15 +202,23 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
         <WorkspaceError details={playground.errorDetails} onRetry={playground.retry} />
       ) : (
         <main
+          style={columns.style}
           className={cn(
             "grid flex-1 gap-3 p-3 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)]",
             "md:grid-cols-2",
-            "lg:min-h-0 lg:grid-cols-[38fr_32fr_30fr] lg:grid-rows-[minmax(0,1fr)_minmax(200px,32%)]",
+            "lg:min-h-0 lg:grid-cols-[var(--gd-cols)] lg:grid-rows-[minmax(0,1fr)_minmax(200px,32%)] lg:gap-x-0",
           )}
         >
           <EditorPanel
             files={files}
             className={cn(visibleOn("editor"), "h-[calc(100dvh-10rem)] md:h-[480px] lg:h-auto")}
+          />
+          <ResizeHandle
+            index={0}
+            sizes={columns.sizes}
+            onChange={columns.setSizes}
+            onReset={columns.reset}
+            label="Resize the editor and terminal panels"
           />
           <TerminalPanel
             executor={executor}
@@ -197,6 +229,13 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
             footer={<ErrorExplanation />}
             className={cn(visibleOn("terminal"), "h-[calc(100dvh-10rem)] md:h-[480px] lg:h-auto")}
           />
+          <ResizeHandle
+            index={1}
+            sizes={columns.sizes}
+            onChange={columns.setSizes}
+            onReset={columns.reset}
+            label="Resize the terminal and graph panels"
+          />
           <RepositoryGraphPanel
             className={cn(
               visibleOn("graph"),
@@ -206,7 +245,7 @@ export function PlaygroundWorkspace({ scenarios }: { scenarios: PlaygroundScenar
           <div
             className={cn(
               visibleOn("files"),
-              "grid gap-3 md:col-span-2 md:grid-cols-3 lg:col-span-3 lg:min-h-0",
+              "grid gap-3 md:col-span-2 md:grid-cols-3 lg:col-span-5 lg:min-h-0",
             )}
           >
             <WorkspaceFilePanels />

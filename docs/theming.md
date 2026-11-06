@@ -1,8 +1,9 @@
 # Themes
 
-GitDojo has a dark theme (the default) and a light theme. Learners switch with the sun/moon
-button in the site header, the lesson and challenge workspace toolbar, and the playground
-toolbar.
+GitDojo has a dark theme (the default) and a light theme, and can follow the operating system
+("System"). Learners switch with the sun/moon button in the site header, the lesson and challenge
+workspace toolbar, and the playground toolbar; Settings (`/settings`) and the command palette also
+offer System.
 
 ## How it works
 
@@ -20,6 +21,10 @@ toolbar.
   before any JavaScript bundle loads. `suppressHydrationWarning` on `<html>` lets React keep the
   attributes the script set. This is the approach in Next's "Preventing flash before hydration" guide; pages stay statically
   prerendered.
+- **System.** The saved preference can be `system`. `THEME_SCRIPT` and `resolveTheme` then ask
+  `prefers-color-scheme: light`, and `subscribeTheme` follows the operating system while that
+  preference is chosen. `useThemePreference` reads the choice; `useTheme` still returns the theme
+  being shown, so nothing else needs to know about System.
 - **Every tab.** `ThemeSync` (in the root layout) listens for `storage` events, so a change in one
   tab applies in the others, including pages without the site header.
 - **The toggle** is a toggle button named "Dark theme" with `aria-pressed`, so assistive technology
