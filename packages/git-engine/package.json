@@ -14,9 +14,9 @@
   },
   "dependencies": {
     "@gitdojo/shared-types": "workspace:*",
-    "@isomorphic-git/lightning-fs": "4.10.4",
+    "@isomorphic-git/lightning-fs": "4.10.5",
     "buffer": "6.0.3",
-    "isomorphic-git": "1.44.8"
+    "isomorphic-git": "1.44.11"
   },
   "devDependencies": {
     "@gitdojo/config": "workspace:*",
