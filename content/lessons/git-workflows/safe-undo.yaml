@@ -35,5 +35,6 @@ content:
     title: Undo shared work without erasing its history
     command: git revert HEAD
     explanation: >-
-      Revert records a new change that reverses an earlier commit. Teammates can pull the result
-      without reconciling a rewritten branch.
+      This example assumes the mistake is the latest commit, `HEAD`. In real work, inspect `git log`
+      first and replace `HEAD` with the ID of the commit you intend to undo. Revert records a new
+      change, so teammates can pull the result without reconciling rewritten history.

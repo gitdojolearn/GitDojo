@@ -30,7 +30,7 @@ content:
         - { id: B, parent: A, message: Add page }
         - { id: C, parent: B, message: Add search }
         - { id: D, parent: B, message: Fix navigation }
-        - { id: M, parent: C, merge: D, message: Merge feature }
+        - { id: M, parent: D, merge: C, message: Merge feature }
       branches: { main: M, feature/search: C }
       head: main
     caption: A merge keeps both lines of history and connects them with a merge commit.

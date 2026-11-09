@@ -25,10 +25,13 @@ content:
 
   - type: example
     title: Inspect before integrating
-    command: git log --oneline main..origin/main
+    command: git show origin/main
+    output: |
+      commit 2c491f2
+      Add cache to forecast requests
     explanation: >-
-      After fetching, compare your local branch with the remote-tracking branch. You can review
-      incoming commits before they change your current branch.
+      After fetching, inspect the remote branch's latest commit before you integrate it. This
+      example uses `git show` to read the `origin/main` tip without changing your current branch.
 
   - type: callout
     tone: tip

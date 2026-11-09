@@ -25,6 +25,13 @@ content:
       The tag identifies a point in history even after `main` moves forward. Annotated tags can
       also store a message and author for release records.
 
+  - type: example
+    title: Create an annotated release tag
+    command: git tag -a v2.4.0 -m "Release 2.4.0"
+    explanation: >-
+      Once the release checks pass, this creates an annotated tag on the current commit. Use the
+      version your team agreed to ship.
+
   - type: callout
     tone: note
     body: >-
