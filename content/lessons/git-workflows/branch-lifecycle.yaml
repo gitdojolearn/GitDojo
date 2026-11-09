@@ -1,0 +1,33 @@
+id: branch-lifecycle
+slug: branch-lifecycle
+title: Give Feature Branches a Clear Lifecycle
+type: concept
+
+goal: Use a branch for a piece of work, then finish or remove it when that work is done.
+description: Branches make parallel work safer when each one has a clear purpose and end point.
+difficulty: beginner
+concepts: [branches, collaboration, git-switch]
+
+content:
+  - type: text
+    title: Branches are movable names
+    body: >-
+      A branch name points to a commit and advances when you commit on that branch. A short-lived
+      branch gives a feature or fix its own line of work while `main` stays ready for the next task.
+
+  - type: example
+    title: A simple feature lifecycle
+    command: git branch
+    output: |2
+        feature/search
+      * main
+    explanation: >-
+      Start from an up-to-date base, keep commits for one task on the feature branch, then merge
+      the finished work. Once the work is integrated, delete the temporary branch if your team no
+      longer needs it.
+
+  - type: callout
+    tone: note
+    body: >-
+      A branch is a name for commits, not a separate copy of the whole project. Switching branches
+      changes which history your working directory follows.

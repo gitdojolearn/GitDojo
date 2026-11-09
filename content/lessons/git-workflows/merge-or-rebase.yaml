@@ -1,0 +1,42 @@
+id: merge-or-rebase
+slug: merge-or-rebase
+title: Choose Between Merge and Rebase
+type: concept
+
+goal: Understand how merge and rebase combine work before choosing a team workflow.
+description: Both commands bring commits together, but they tell different stories in history.
+difficulty: intermediate
+concepts: [git-merge, git-rebase, history]
+
+content:
+  - type: comparison
+    title: Two ways to integrate a branch
+    columns:
+      - title: Merge
+        items:
+          - Preserves the original commits
+          - Can record the integration as a merge commit
+          - Safe for commits other people already have
+      - title: Rebase
+        items:
+          - Replays commits on top of a new base
+          - Produces a straighter history
+          - Rewrites commit IDs
+
+  - type: diagram
+    graph:
+      commits:
+        - { id: A, message: Initial commit }
+        - { id: B, parent: A, message: Add page }
+        - { id: C, parent: B, message: Add search }
+        - { id: D, parent: B, message: Fix navigation }
+        - { id: M, parent: D, merge: C, message: Merge feature }
+      branches: { main: M, feature/search: C }
+      head: main
+    caption: A merge keeps both lines of history and connects them with a merge commit.
+
+  - type: callout
+    tone: warning
+    body: >-
+      Rebase rewrites commits. Do not rebase a branch that teammates are already using unless your
+      team agrees on how to coordinate the rewrite.

@@ -1,0 +1,41 @@
+id: small-commits
+slug: small-commits
+title: Keep Commits Focused
+type: concept
+
+goal: Make each commit explain one related change.
+description: Focused commits are easier to review, test, revert and understand later.
+difficulty: beginner
+concepts: [commits, code-review, history]
+
+content:
+  - type: comparison
+    title: One purpose or a grab bag?
+    columns:
+      - title: Focused commit
+        items:
+          - Fixes rounding in the forecast
+          - Includes only the related code and tests
+          - Can be reverted without losing other work
+      - title: Mixed commit
+        items:
+          - Fixes rounding, changes colors and edits a README
+          - Hides unrelated changes together
+          - Makes review and recovery harder
+
+  - type: diagram
+    graph:
+      commits:
+        - { id: A, message: Add forecast panel }
+        - { id: B, parent: A, message: Fix forecast rounding }
+        - { id: C, parent: B, message: Document temperature units }
+      branches: { main: C }
+      head: main
+    caption: >-
+      Separate commits make the story of a project easier to follow. Each commit can be understood
+      on its own.
+
+  - type: callout
+    tone: tip
+    body: >-
+      If you cannot describe a commit in one short sentence, split it by purpose before sharing it.
