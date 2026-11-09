@@ -1,0 +1,32 @@
+id: tag-your-releases
+slug: tag-your-releases
+title: Mark Releases with Tags
+type: concept
+
+goal: Use a stable name to point to the exact commit that was released.
+description: Release tags make it easy to return to the source used to ship a version.
+difficulty: beginner
+concepts: [tags, releases, history]
+
+content:
+  - type: text
+    title: A release needs a fixed reference
+    body: >-
+      Branches move when new commits are added. A tag stays on one commit, so a version such as
+      `v2.4.0` can identify the exact source used for a release.
+
+  - type: example
+    title: Find the tagged release in history
+    command: git log --oneline
+    output: |
+      c491f25 (HEAD -> main, tag: v2.4.0) Fix export rounding
+      90e2ab1 Add CSV export
+    explanation: >-
+      The tag identifies a point in history even after `main` moves forward. Annotated tags can
+      also store a message and author for release records.
+
+  - type: callout
+    tone: note
+    body: >-
+      Teams usually publish release tags so other people and automation can find them. GitDojo's
+      simulated remotes focus on branch synchronization; tag pushing is not part of the exercise.

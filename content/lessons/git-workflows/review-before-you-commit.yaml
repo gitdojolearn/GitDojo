@@ -1,0 +1,34 @@
+id: review-before-you-commit
+slug: review-before-you-commit
+title: Review Before You Commit
+type: concept
+
+goal: Check what changed and what will be recorded before creating a commit.
+description: A quick review catches accidental files, unfinished edits and surprises in the diff.
+difficulty: beginner
+concepts: [git-status, git-diff, review]
+
+content:
+  - type: text
+    title: Two questions, two commands
+    body: >-
+      Before you commit, ask **what changed?** and **what is staged?** `git diff` shows unstaged
+      edits. `git diff --staged` shows what the next commit will contain. `git status` summarizes
+      both areas and points out untracked files.
+
+  - type: example
+    title: Review the exact snapshot
+    command: git diff --staged
+    output: |
+      diff --git a/src/forecast.js b/src/forecast.js
+      -return temperature;
+      +return Math.round(temperature);
+    explanation: >-
+      Read the staged diff as if it were a teammate's change. If it includes unrelated or sensitive
+      content, unstage or edit it before committing.
+
+  - type: callout
+    tone: tip
+    body: >-
+      A clean working tree after a commit is reassuring, but it does not prove the commit is right.
+      Review the staged diff before you create the snapshot.

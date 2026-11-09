@@ -1,0 +1,41 @@
+id: pull-request-workflow
+slug: pull-request-workflow
+title: What Happens in a Pull Request
+type: concept
+
+goal: Understand how a pull request helps a team review and integrate a branch.
+description: A pull request is a conversation around proposed changes, not a Git command.
+difficulty: beginner
+concepts: [github, pull-requests, code-review]
+
+content:
+  - type: diagram
+    graph:
+      commits:
+        - { id: A, message: Initial commit }
+        - { id: B, parent: A, message: Add search form }
+        - { id: C, parent: B, message: Add search tests }
+      branches: { main: A, feature/search: C }
+      head: feature/search
+    caption: A pull request asks teammates to review the commits on `feature/search` before integration.
+
+  - type: text
+    title: A reviewable proposal
+    body: >-
+      A pull request compares a source branch with a target branch. It gives reviewers a place to
+      discuss the diff, request changes and check automated results. New commits pushed to the
+      source branch update the same proposal.
+
+  - type: comparison
+    title: Git and GitHub have different jobs
+    columns:
+      - title: Git
+        items:
+          - Records commits and branches
+          - Compares and combines histories
+          - Works on your machine
+      - title: GitHub pull request
+        items:
+          - Hosts a review conversation
+          - Runs team checks and approvals
+          - Helps a team agree to integrate a branch

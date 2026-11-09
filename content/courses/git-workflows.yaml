@@ -1,0 +1,24 @@
+# Course: Practical Git Workflows
+# Lessons live in content/lessons/git-workflows/. Authoring guide: docs/lesson-authoring.md
+id: git-workflows
+slug: git-workflows
+title: Practical Git Workflows
+
+description: >
+  Put Git's everyday commands together into safe, useful habits: review changes, make focused
+  commits, collaborate on branches, recover from mistakes and prepare releases.
+
+difficulty: beginner
+order: 8
+
+lessons:
+  - review-before-you-commit
+  - small-commits
+  - useful-commit-messages
+  - branch-lifecycle
+  - merge-or-rebase
+  - safe-undo
+  - fetch-before-you-work
+  - pull-request-workflow
+  - protect-secrets
+  - tag-your-releases

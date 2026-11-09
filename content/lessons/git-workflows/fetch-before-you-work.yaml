@@ -1,0 +1,37 @@
+id: fetch-before-you-work
+slug: fetch-before-you-work
+title: Check What Teammates Published
+type: concept
+
+goal: Distinguish fetching updates from integrating them into your current branch.
+description: Fetch lets you inspect remote changes before deciding how to combine them.
+difficulty: beginner
+concepts: [git-fetch, git-pull, remotes]
+
+content:
+  - type: comparison
+    title: Fetch first, integrate deliberately
+    columns:
+      - title: "`git fetch`"
+        items:
+          - Downloads remote commits
+          - Updates remote-tracking names such as `origin/main`
+          - Leaves your current branch and files unchanged
+      - title: "`git pull`"
+        items:
+          - Fetches remote commits
+          - Then integrates them into the current branch
+          - May merge or rebase, depending on configuration
+
+  - type: example
+    title: Inspect before integrating
+    command: git log --oneline main..origin/main
+    explanation: >-
+      After fetching, compare your local branch with the remote-tracking branch. You can review
+      incoming commits before they change your current branch.
+
+  - type: callout
+    tone: tip
+    body: >-
+      GitDojo uses simulated remotes in lessons. They teach the same local and remote-tracking
+      relationships without connecting to a real server.
