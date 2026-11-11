@@ -1,0 +1,41 @@
+id: useful-commit-messages
+slug: useful-commit-messages
+title: Write Useful Commit Messages
+type: concept
+
+goal: Give commits short subjects that explain the change.
+description: A good message makes history useful to someone who did not write the code.
+difficulty: beginner
+concepts: [commits, history, communication]
+
+content:
+  - type: text
+    title: Describe the change
+    body: |
+      A commit message is a note attached to a permanent snapshot. Start with a short subject that
+      says what the commit does. Add a blank line and more detail only when the reason or trade-off
+      needs explanation.
+
+  - type: comparison
+    title: Specific beats vague
+    columns:
+      - title: Hard to understand later
+        items:
+          - "Update stuff"
+          - "Fix bug"
+          - "Changes"
+      - title: Easier to search and review
+        items:
+          - "Round forecast temperatures"
+          - "Keep empty carts at zero"
+          - "Document the staging workflow"
+
+  - type: example
+    title: Subject plus context
+    command: git log --oneline
+    output: |
+      b7f2a91 Round forecast temperatures
+      50c4d03 Add forecast panel
+    explanation: >-
+      The one-line history is a useful table of contents. A clear subject helps you find the right
+      change before opening its full details.
