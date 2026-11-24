@@ -22,3 +22,13 @@ export {
   type GitEngineOptions,
 } from "./engine/isomorphic-git-engine";
 export * from "./engine/git-engine";
+export { type ReadOnlyTree } from "./external/read-only-fs";
+export {
+  DEFAULT_MAX_COMMITS,
+  ExternalRepository,
+  ExternalRepositoryError,
+  type ExternalCommitDiff,
+  type ExternalFileDiff,
+  type ExternalHistory,
+  type ExternalHistoryOptions,
+} from "./external/external-repository";

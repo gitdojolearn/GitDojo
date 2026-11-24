@@ -3,11 +3,16 @@
 import "@xyflow/react/dist/style.css";
 
 import { Badge } from "@gitdojo/ui";
-import { ReactFlow, type EdgeTypes, type NodeTypes } from "@xyflow/react";
+import { ReactFlow, type EdgeTypes, type NodeTypes, type ReactFlowInstance } from "@xyflow/react";
 import { FolderGit2, GitBranch } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "@/features/theme";
-import { buildCommitGraph } from "../services/build-commit-graph";
+import {
+  buildCommitGraph,
+  COMMIT_CARD_WIDTH,
+  COMMIT_ROW_HEIGHT,
+  type CommitFlowNode,
+} from "../services/build-commit-graph";
 import { isRecent } from "../services/transitions";
 import { useRepositoryStore } from "../state/use-repository-store";
 import { CommitDetails } from "./CommitDetails";
@@ -74,11 +79,26 @@ function useHasSize<T extends HTMLElement>() {
   return [setElement, hasSize] as const;
 }
 
+/** More commits than this, in a scrollable graph, open at the top instead of all fitted in. */
+const LONG_HISTORY = 8;
+/** Space around a long history's graph, in px. */
+const LONG_HISTORY_PADDING = 24;
+
+export interface RepositoryGraphProps {
+  /** Show the selected commit's details under the graph. Off when the page shows them itself. */
+  details?: boolean;
+  /**
+   * For long histories (a real repository): frame the newest commits instead of all of them, and
+   * scroll through the rest with the wheel or trackpad.
+   */
+  scrollable?: boolean;
+}
+
 /**
  * Vertical commit graph (React Flow) of every branch, with branch and HEAD labels. Clicking a
  * commit shows its details.
  */
-export function RepositoryGraph() {
+export function RepositoryGraph({ details = true, scrollable = false }: RepositoryGraphProps) {
   const repository = useRepositoryStore((state) => state.repositoryState);
   const selectedOid = useRepositoryStore((state) => state.selectedCommit);
   const selectCommit = useRepositoryStore((state) => state.selectCommit);
@@ -86,18 +106,50 @@ export function RepositoryGraph() {
   // Only a command that just ran animates: re-rendering later (selecting a commit remounts the
   // canvas) shows the graph still.
   const graph = useMemo(
-    () => buildCommitGraph(repository, selectedOid, isRecent(transition) ? transition : null),
-    [repository, selectedOid, transition],
+    () =>
+      buildCommitGraph(repository, selectedOid, isRecent(transition) ? transition : null, {
+        compactLanes: scrollable,
+      }),
+    [repository, selectedOid, transition, scrollable],
   );
-  const selected = repository.allCommits.find((commit) => commit.oid === selectedOid);
+  const selected = details
+    ? repository.allCommits.find((commit) => commit.oid === selectedOid)
+    : undefined;
+  // A long history opens at its newest commits, as wide as the panel allows, rather than fitted.
+  const long = scrollable && graph.nodes.length > LONG_HISTORY;
+  const contentWidth = (graph.nodes[0]?.data.railWidth ?? 0) + COMMIT_CARD_WIDTH;
   const [canvasRef, visible] = useHasSize<HTMLDivElement>();
   const theme = useTheme();
+  const flow = useRef<ReactFlowInstance<CommitFlowNode> | null>(null);
+  const canvas = useRef<HTMLDivElement | null>(null);
+  const setCanvas = useCallback(
+    (element: HTMLDivElement | null) => {
+      canvas.current = element;
+      canvasRef(element);
+    },
+    [canvasRef],
+  );
+
+  // In a long history, a commit selected from elsewhere (a timeline) may be off screen: bring it in.
+  useEffect(() => {
+    const instance = flow.current;
+    const element = canvas.current;
+    const node = graph.nodes.find((candidate) => candidate.id === selectedOid);
+    if (!scrollable || !instance || !element || !node) return;
+    const { x, y, zoom } = instance.getViewport();
+    const top = node.position.y * zoom + y;
+    if (top >= 0 && top + COMMIT_ROW_HEIGHT * zoom <= element.clientHeight) return;
+    void instance.setViewport(
+      { x, y: element.clientHeight / 3 - node.position.y * zoom, zoom },
+      { duration: 300 },
+    );
+  }, [scrollable, selectedOid, graph.nodes]);
 
   if (graph.nodes.length === 0) return <EmptyGraph />;
 
   return (
     <div className="flex h-full flex-col" data-testid="commit-graph">
-      <div ref={canvasRef} className="min-h-0 flex-1">
+      <div ref={setCanvas} className="min-h-0 flex-1">
         {visible ? (
           <ReactFlow
             // Re-fit when commits are added or the details pane changes the canvas size;
@@ -107,11 +159,26 @@ export function RepositoryGraph() {
             edges={graph.edges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            onInit={(instance) => {
+              flow.current = instance;
+              const width = canvas.current?.clientWidth ?? 0;
+              if (long && width > 0) {
+                const zoom = Math.min(
+                  1,
+                  Math.max(0.6, width / (contentWidth + 2 * LONG_HISTORY_PADDING)),
+                );
+                void instance.setViewport({
+                  x: LONG_HISTORY_PADDING,
+                  y: LONG_HISTORY_PADDING,
+                  zoom,
+                });
+              }
+            }}
             onNodeClick={(_event, node) => {
               selectCommit(node.id === selectedOid ? null : node.id);
             }}
             colorMode={theme}
-            fitView
+            fitView={!long}
             fitViewOptions={FIT_VIEW_OPTIONS}
             minZoom={0.4}
             maxZoom={1.5}
@@ -119,7 +186,8 @@ export function RepositoryGraph() {
             nodesConnectable={false}
             elementsSelectable={false}
             zoomOnScroll={false}
-            preventScrolling={false}
+            panOnScroll={scrollable}
+            preventScrolling={scrollable}
             proOptions={{ hideAttribution: false }}
             aria-label="Commit graph"
           />

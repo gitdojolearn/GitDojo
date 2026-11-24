@@ -71,6 +71,11 @@ Then:
 - **Playground** (`/playground`): no lesson at all. Edit files, run anything, load ready-made
   scenarios (a merge conflict, a detached HEAD, a repository to recover...), and come back later:
   it survives a refresh.
+- **Explore your repository** (`/explore`): open a real project from your computer and see its
+  branches and commits as a graph, a timeline of what was done in it read from the reflog
+  (commits, switches, merges, resets, rebases, and work left behind or recovered), and each commit
+  explained in plain words with its exact changes. The repository is read in place, read-only: it
+  is never uploaded, copied or changed. See [docs/explore.md](docs/explore.md).
 
 Your progress is saved in the browser, no account needed. The **dashboard** (`/dashboard`) shows
 your Git journey through the courses and where to continue, recommended next steps, the days you

@@ -101,6 +101,15 @@ and a reload never loses work.
 - **Export** downloads a JSON snapshot: the working-tree files plus the normalized
   `RepositoryState` (commits, branches, reflog...).
 
+## Repository explorer
+
+`/explore` reads a repository from the learner's own computer, not a workspace: the
+`explore` feature (layer 8) turns a picked folder into a `ReadOnlyTree`, and
+`ExternalRepository` (`@gitdojo/git-engine`) reads its history through a read-only filesystem
+adapter whose every write fails. The result is a `GitRepositorySnapshot`, mapped by
+`toRepositoryState` like any workspace and drawn by the same graph. Nothing goes through
+`WorkspaceSession`, since there is nothing to validate or record. See [explore.md](./explore.md).
+
 ## Challenges
 
 `/challenges` lists real-world problems by category; `/challenges/<id>` runs one. Challenges are
@@ -308,7 +317,9 @@ route → GitEngine → read state → validate → progress (see [The core loop
 Only `features/workspace/services` imports `@gitdojo/git-engine`, `@gitdojo/repository-state`
 and `@gitdojo/validator` at runtime **(lint)**, so nothing can change the repository without the
 state, validation and progress being recomputed. New behavior plugs in as a stage, or as a
-subscriber to the session's snapshot, never as a side channel.
+subscriber to the session's snapshot, never as a side channel. The one other owner is
+`features/explore/services`, which only reads a repository the learner picked on their own
+computer, never a workspace.
 
 ### 3. Command + reducer (state changes)
 
@@ -362,7 +373,7 @@ Each third-party SDK is imported in one place, so replacing or upgrading it touc
 
   | Layer | Features                                                        |
   | ----- | --------------------------------------------------------------- |
-  | 8     | `playground`, `practice`, `commands`, `docs`                    |
+  | 8     | `playground`, `practice`, `commands`, `docs`, `explore`         |
   | 7     | `workspace`, `dashboard` (page shells)                          |
   | 6     | `lesson`, `errors`                                              |
   | 5     | `course`, `challenges`, `editor`, `conflicts`, `releases`       |

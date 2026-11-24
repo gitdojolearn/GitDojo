@@ -12,6 +12,7 @@ import {
 import { GitBranch, GitCommitHorizontal } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRepositoryStore } from "../state/use-repository-store";
+import { type RepositoryGraphProps } from "./RepositoryGraph";
 
 // React Flow measures the DOM, so the graph renders on the client only.
 const RepositoryGraph = dynamic(
@@ -19,7 +20,11 @@ const RepositoryGraph = dynamic(
   { ssr: false },
 );
 
-export function RepositoryGraphPanel({ className }: { className?: string }) {
+export function RepositoryGraphPanel({
+  className,
+  description = "Click a commit to inspect it",
+  ...graph
+}: RepositoryGraphProps & { className?: string; description?: string }) {
   const count = useRepositoryStore((state) => state.repositoryState.allCommits.length);
   const branch = useRepositoryStore((state) => state.repositoryState.currentBranch);
 
@@ -31,7 +36,7 @@ export function RepositoryGraphPanel({ className }: { className?: string }) {
             <GitCommitHorizontal aria-hidden="true" />
             Repository Graph
           </PanelTitle>
-          <PanelDescription>Click a commit to inspect it</PanelDescription>
+          <PanelDescription>{description}</PanelDescription>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {branch ? (
@@ -51,7 +56,7 @@ export function RepositoryGraphPanel({ className }: { className?: string }) {
         </div>
       </PanelHeader>
       <PanelBody className="p-0">
-        <RepositoryGraph />
+        <RepositoryGraph {...graph} />
       </PanelBody>
     </Panel>
   );
