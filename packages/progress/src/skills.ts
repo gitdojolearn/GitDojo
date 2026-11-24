@@ -41,6 +41,7 @@ export const SKILLS: readonly SkillDefinition[] = [
       "working-tree",
       "file-states",
       "untracked-files",
+      "review",
     ],
   },
   {
@@ -48,7 +49,15 @@ export const SKILLS: readonly SkillDefinition[] = [
     label: "Commits",
     phrase: "committing",
     description: "Recording changes with clear messages, under your own name.",
-    concepts: ["commits", "commit", "git-commit", "commit-messages", "config"],
+    concepts: [
+      "commits",
+      "commit",
+      "git-commit",
+      "commit-messages",
+      "config",
+      "communication",
+      "code-review",
+    ],
   },
   {
     id: "history",
@@ -78,7 +87,7 @@ export const SKILLS: readonly SkillDefinition[] = [
     label: "Merging",
     phrase: "merging",
     description: "Fast-forward and three-way merges.",
-    concepts: ["merging", "merge", "fast-forward", "merge-commits", "workflow"],
+    concepts: ["merging", "merge", "git-merge", "fast-forward", "merge-commits", "workflow"],
   },
   {
     id: "conflicts",
@@ -92,7 +101,16 @@ export const SKILLS: readonly SkillDefinition[] = [
     label: "Undoing changes",
     phrase: "undo",
     description: "Restoring files, resetting and reverting commits.",
-    concepts: ["reset", "restore", "revert", "undo", "shared-history"],
+    concepts: [
+      "reset",
+      "git-reset",
+      "restore",
+      "git-restore",
+      "revert",
+      "git-revert",
+      "undo",
+      "shared-history",
+    ],
   },
   {
     id: "stashing",
@@ -120,7 +138,7 @@ export const SKILLS: readonly SkillDefinition[] = [
     label: "Rebasing",
     phrase: "rebasing",
     description: "Replaying a branch on top of another.",
-    concepts: ["rebase", "rebasing"],
+    concepts: ["rebase", "git-rebase", "rebasing"],
   },
   {
     id: "rewriting-history",
@@ -148,8 +166,13 @@ export const SKILLS: readonly SkillDefinition[] = [
       "remote-tracking-branches",
       "upstream",
       "fetch",
+      "git-fetch",
       "pull",
+      "git-pull",
       "push",
+      "github",
+      "pull-requests",
+      "collaboration",
     ],
   },
   {
@@ -157,7 +180,7 @@ export const SKILLS: readonly SkillDefinition[] = [
     label: "Ignoring and renaming files",
     phrase: "housekeeping",
     description: "Keeping files out of Git and renaming tracked files.",
-    concepts: ["gitignore", "ignore", "git-mv", "mv", "renames"],
+    concepts: ["gitignore", "ignore", "git-mv", "mv", "renames", "security"],
   },
 ];
 

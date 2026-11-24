@@ -1,0 +1,53 @@
+id: fetch-before-you-work
+slug: fetch-before-you-work
+title: Check What Teammates Published
+type: concept
+
+goal: Distinguish fetching updates from integrating them into your current branch.
+description: Fetch lets you inspect remote changes before deciding how to combine them.
+difficulty: beginner
+concepts: [git-fetch, git-pull, remotes]
+
+content:
+  - type: comparison
+    title: Fetch first, integrate deliberately
+    columns:
+      - title: "`git fetch`"
+        items:
+          - Downloads remote commits
+          - Updates remote-tracking names such as `origin/main`
+          - Leaves your current branch and files unchanged
+      - title: "`git pull`"
+        items:
+          - Fetches remote commits
+          - Then integrates them into the current branch
+          - May merge or rebase, depending on configuration
+
+  - type: example
+    title: Inspect before integrating
+    command: git show origin/main
+    output: |
+      commit 2c491f2a6d3a1dbe59d085d62f5a1e8e0b4a7c31 (origin/main)
+      Author: Kim Lee <kim@example.com>
+      Date:   Mon Oct 20 10:15:00 2025 +0000
+
+          Add cache to forecast requests
+
+      diff --git a/src/forecast.js b/src/forecast.js
+      index 3b18e51..8f1c2a0 100644
+      --- a/src/forecast.js
+      +++ b/src/forecast.js
+      @@ -1,2 +1,3 @@
+       export async function forecast(city) {
+      +  const cached = await cache.get(city);
+         return requestForecast(city);
+      Add cache to forecast requests
+    explanation: >-
+      After fetching, inspect the remote branch's latest commit before you integrate it. This
+      example uses `git show` to read the `origin/main` tip without changing your current branch.
+
+  - type: callout
+    tone: tip
+    body: >-
+      GitDojo uses simulated remotes in lessons. They teach the same local and remote-tracking
+      relationships without connecting to a real server.

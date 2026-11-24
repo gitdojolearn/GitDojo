@@ -62,6 +62,7 @@ describe("courses", () => {
       "recovery",
       "everyday-git",
       "remotes",
+      "git-workflows",
     ]);
   });
 

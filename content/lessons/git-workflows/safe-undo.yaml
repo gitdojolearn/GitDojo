@@ -1,0 +1,40 @@
+id: safe-undo
+slug: safe-undo
+title: Pick a Safe Way to Undo
+type: concept
+
+goal: Match an undo operation to the kind of change you need to correct.
+description: The safest fix depends on whether the change is uncommitted, local or already shared.
+difficulty: intermediate
+concepts: [git-restore, git-reset, git-revert, recovery]
+
+content:
+  - type: comparison
+    title: Choose by where the mistake is
+    columns:
+      - title: Uncommitted edit
+        items:
+          - Use `git restore` to discard a file edit
+          - Review the diff first; discarded edits may be hard to recover
+      - title: Local commit not shared
+        items:
+          - "`git reset` moves the current branch to another commit"
+          - Check which changes it keeps or removes
+      - title: Commit already shared
+        items:
+          - "`git revert` adds a new commit that undoes the old one"
+          - Keeps shared history intact
+
+  - type: callout
+    tone: warning
+    body: >-
+      Before an undo, run `git status` and identify what is staged, unstaged and committed. The same
+      command can have very different consequences depending on that state.
+
+  - type: example
+    title: Undo shared work without erasing its history
+    command: git revert HEAD
+    explanation: >-
+      This example assumes the mistake is the latest commit, `HEAD`. In real work, inspect `git log`
+      first and replace `HEAD` with the ID of the commit you intend to undo. Revert records a new
+      change, so teammates can pull the result without reconciling rewritten history.
