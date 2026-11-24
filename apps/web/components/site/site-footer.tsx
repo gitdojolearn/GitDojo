@@ -13,6 +13,7 @@ const FOOTER: { heading: string; links: { label: string; href: string; external?
         { label: "Challenges", href: "/challenges" },
         { label: "Practice", href: "/practice" },
         { label: "Playground", href: "/playground" },
+        { label: "Explore your repository", href: "/explore" },
         { label: "Git commands", href: "/commands" },
       ],
     },

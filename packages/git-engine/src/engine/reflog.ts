@@ -56,7 +56,11 @@ export async function readReflog(ctx: GitContext, ref = "HEAD"): Promise<ReflogR
     if (hasErrorCode(error, "ENOENT")) return [];
     throw error;
   }
-  const text = typeof raw === "string" ? raw : new TextDecoder().decode(raw);
+  return parseReflog(typeof raw === "string" ? raw : new TextDecoder().decode(raw));
+}
+
+/** Parses a reflog file's text, newest first. */
+export function parseReflog(text: string): ReflogRecord[] {
   return text
     .split("\n")
     .filter((line) => line !== "")

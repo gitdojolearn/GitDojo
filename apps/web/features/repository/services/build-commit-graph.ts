@@ -63,6 +63,8 @@ export function buildCommitGraph(
   selectedOid: string | null,
   /** What the latest command did; omit it (or pass `null`) for a still graph. */
   transition: RepositoryTransition | null = null,
+  /** Reuse lanes, for long real-world histories (see `assignLanes`). */
+  { compactLanes = false }: { compactLanes?: boolean } = {},
 ): CommitGraph {
   const commits = state.allCommits;
   const { lanes, laneCount } = assignLanes(
@@ -75,6 +77,7 @@ export function buildCommitGraph(
       ],
       state.head,
     ),
+    { compact: compactLanes },
   );
   const railWidth = laneCenterX(Math.max(laneCount, 1) - 1) + RAIL_PADDING;
   const laneOf = (oid: string) => lanes.get(oid) ?? 0;

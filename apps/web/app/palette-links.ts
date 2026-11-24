@@ -13,6 +13,7 @@ const PAGES: readonly [string, string, string?][] = [
   ["Challenges", "/challenges"],
   ["Practice", "/practice", "drills exercises"],
   ["Playground", "/playground", "sandbox experiment terminal"],
+  ["Explore your repository", "/explore", "open local repo history reflog timeline graph"],
   ["Dashboard", "/dashboard", "progress xp streak profile stats"],
   ["Git commands", "/commands", "reference cheat sheet"],
   ["Certification", "/certification", "certificate"],

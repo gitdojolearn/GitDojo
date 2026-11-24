@@ -16,28 +16,57 @@ export interface LaneLayout {
  * straight line in lane 0 and every branch with commits of its own gets one extra lane.
  * A branch pointing at a commit that is already claimed (e.g. just created) needs no lane.
  *
+ * `compact` reuses a lane once the line of work in it has joined another, as `git log --graph`
+ * does. A real repository's history holds many merged (and since deleted) branches; without it,
+ * each would keep a lane of its own all the way down.
+ *
  * `commits` must list children before parents.
  */
-export function assignLanes(commits: readonly LaneCommit[], tips: readonly string[]): LaneLayout {
+export function assignLanes(
+  commits: readonly LaneCommit[],
+  tips: readonly string[],
+  { compact = false }: { compact?: boolean } = {},
+): LaneLayout {
   const byId = new Map(commits.map((commit) => [commit.id, commit]));
+  const rows = new Map(commits.map((commit, index) => [commit.id, index]));
+  // A merge edge leaves the merge commit and runs down its other parent's lane from that row.
+  const mergedAt = new Map<string, number>();
+  for (const [index, commit] of commits.entries()) {
+    for (const parent of commit.parents.slice(1)) {
+      mergedAt.set(parent, Math.min(mergedAt.get(parent) ?? index, index));
+    }
+  }
   const lanes = new Map<string, number>();
-  let laneCount = 0;
+  /** Rows each lane is drawn over, as `[first, last]` spans. */
+  const spans: [number, number][][] = [];
 
   const claim = (tip: string) => {
     if (!byId.has(tip) || lanes.has(tip)) return;
-    const lane = laneCount;
-    laneCount += 1;
+    const chain: string[] = [];
     let id: string | undefined = tip;
     while (id !== undefined && byId.has(id) && !lanes.has(id)) {
-      lanes.set(id, lane);
+      chain.push(id);
       id = byId.get(id)?.parents[0];
     }
+    const rowOf = (commit: string) => rows.get(commit) ?? 0;
+    const first = Math.min(
+      ...chain.map((commit) => Math.min(rowOf(commit), mergedAt.get(commit) ?? Infinity)),
+    );
+    // The line runs on down to the commit it joins, if that one is in the graph.
+    const last = id !== undefined && byId.has(id) ? rowOf(id) : rowOf(chain.at(-1) ?? tip);
+    const free = compact
+      ? spans.findIndex((taken) => taken.every(([start, end]) => first > end || last < start))
+      : -1;
+    const lane = free === -1 ? spans.length : free;
+    if (lane === spans.length) spans.push([]);
+    spans[lane]?.push([first, last]);
+    for (const commit of chain) lanes.set(commit, lane);
   };
 
   for (const tip of tips) claim(tip);
   // Anything left (e.g. second parents of merges) gets its own lane.
   for (const commit of commits) claim(commit.id);
-  return { lanes, laneCount };
+  return { lanes, laneCount: spans.length };
 }
 
 const DEFAULT_BRANCHES = ["main", "master"];
