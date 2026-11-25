@@ -19,7 +19,7 @@ const LAYERS = [
   ["course", "challenges", "editor", "conflicts", "releases"],
   ["lesson", "errors"],
   ["workspace", "dashboard"],
-  ["playground", "practice", "commands", "docs"],
+  ["playground", "practice", "commands", "docs", "explore"],
 ];
 
 /**
@@ -46,7 +46,13 @@ const FACADES = [
     // The pipeline: commands reach Git, repository state and validation only through
     // WorkspaceSession, so state, validation and progress are always recomputed together.
     modules: ["@gitdojo/git-engine", "@gitdojo/repository-state", "@gitdojo/validator"],
-    owners: ["features/workspace/services", "lib/completion-verification"],
+    // The explorer only reads a repository the learner picked on their own computer, never a
+    // workspace, so it has no state, validation or progress to keep in step.
+    owners: [
+      "features/workspace/services",
+      "lib/completion-verification",
+      "features/explore/services",
+    ],
     allowTypeImports: true,
     // Error classes, for `instanceof` checks on what the session rejects with.
     allowImportNames: ["FileNotFoundError"],

@@ -26,6 +26,41 @@ describe("assignLanes", () => {
   it("places commits no tip reaches", () => {
     expect(assignLanes(commits, []).lanes.size).toBe(4);
   });
+
+  describe("compact", () => {
+    // Three pull requests merged one after another; their branches are gone.
+    const merged = [
+      { id: "M3", parents: ["M2", "F3"] },
+      { id: "F3", parents: ["M2"] },
+      { id: "M2", parents: ["M1", "F2"] },
+      { id: "F2", parents: ["M1"] },
+      { id: "M1", parents: ["A", "F1"] },
+      { id: "F1", parents: ["A"] },
+      { id: "A", parents: [] },
+    ];
+
+    it("reuses a lane once its line of work has joined another", () => {
+      const { lanes, laneCount } = assignLanes(merged, ["M3"], { compact: true });
+      expect(Object.fromEntries(lanes)).toEqual({
+        M3: 0,
+        M2: 0,
+        M1: 0,
+        A: 0,
+        F3: 1,
+        // F2's merge into M2 meets F3's line at M2: it cannot share that lane.
+        F2: 2,
+        F1: 1,
+      });
+      expect(laneCount).toBe(3);
+      expect(assignLanes(merged, ["M3"]).laneCount).toBe(4);
+    });
+
+    it("lays out like the default when no lane comes free", () => {
+      expect(assignLanes(commits, ["D", "C"], { compact: true })).toEqual(
+        assignLanes(commits, ["D", "C"]),
+      );
+    });
+  });
 });
 
 describe("tipsInLaneOrder", () => {

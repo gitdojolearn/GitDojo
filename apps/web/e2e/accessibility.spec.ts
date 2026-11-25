@@ -38,6 +38,7 @@ const PAGES = [
   { name: "terms of use", path: "/terms" },
   { name: "settings", path: "/settings" },
   { name: "command reference", path: "/commands" },
+  { name: "repository explorer", path: "/explore" },
   { name: "command page", path: "/commands/reset" },
   { name: "docs index", path: "/docs" },
   { name: "docs page", path: "/docs/lesson-authoring" },
