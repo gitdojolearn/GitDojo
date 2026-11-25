@@ -8,23 +8,40 @@ import { renderInline } from "@/components/content/rich-text";
 import { formatRelativeTime, formatTimestamp } from "@/lib/time";
 import { useCommitDiff } from "../hooks/use-explore";
 import { explainCommit } from "../services/explain-commit";
+import { type TimelineEvent } from "../services/timeline";
+import { undoSuggestion } from "../services/undo";
 import { DiffView } from "./DiffView";
+import { UndoPanel } from "./UndoPanel";
 
 /** One commit up close: what it is in plain words, then exactly what it changed. */
 export function CommitInspector({
   commit,
   state,
   truncated,
+  timeline,
+  onShowStep,
   onClose,
 }: {
   commit: CommitState;
   state: RepositoryState;
   truncated: boolean;
+  timeline: readonly TimelineEvent[];
+  onShowStep: (selector: string) => void;
   onClose: () => void;
 }) {
   const explanation = useMemo(
     () => explainCommit(commit, state, truncated),
     [commit, state, truncated],
+  );
+  // Steps that left this commit behind, each with how to undo it.
+  const leftBy = useMemo(
+    () =>
+      timeline.flatMap((event) => {
+        if (event.leftBehind?.oid !== commit.oid) return [];
+        const suggestion = undoSuggestion(event, timeline, truncated);
+        return suggestion ? [{ event, suggestion }] : [];
+      }),
+    [commit.oid, timeline, truncated],
   );
   const diff = useCommitDiff(commit.oid);
   const [subject, ...body] = commit.message.split("\n");
@@ -68,6 +85,22 @@ export function CommitInspector({
           ))}
         </ul>
       </section>
+
+      {leftBy.length > 0 ? (
+        <section aria-label="Left behind" className="space-y-2">
+          <h4 className="text-micro font-semibold tracking-wider text-fg-muted uppercase">
+            Left behind
+          </h4>
+          {leftBy.map(({ event, suggestion }) => (
+            <div key={event.selector} className="space-y-1">
+              <p className="text-caption text-fg-secondary">
+                {renderInline(`\`${event.selector}\` left this commit behind.`)}
+              </p>
+              <UndoPanel suggestion={suggestion} onShowStep={onShowStep} />
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       <section aria-label="Changes">
         <h4 className="mb-2 text-micro font-semibold tracking-wider text-fg-muted uppercase">

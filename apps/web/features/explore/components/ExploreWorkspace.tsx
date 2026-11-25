@@ -8,7 +8,7 @@ import { useOpenRepository } from "../hooks/use-explore";
 import { canPickDirectory } from "../services/folder-tree";
 import { useExploreStore } from "../state/use-explore-store";
 import { CommitInspector } from "./CommitInspector";
-import { Timeline } from "./Timeline";
+import { showStep, Timeline } from "./Timeline";
 
 const subscribeNothing = () => () => undefined;
 const onClient = () => true;
@@ -222,6 +222,7 @@ function Explorer() {
           >
             <Timeline
               events={timeline}
+              truncated={truncated}
               selectedOid={selectedOid}
               onSelect={(oid) => {
                 selectCommit(oid);
@@ -240,6 +241,14 @@ function Explorer() {
                 commit={selected}
                 state={state}
                 truncated={truncated}
+                timeline={timeline}
+                onShowStep={(selector) => {
+                  setTab("timeline");
+                  // The timeline is hidden until this render lands.
+                  requestAnimationFrame(() => {
+                    showStep(selector);
+                  });
+                }}
                 onClose={() => {
                   selectCommit(null);
                   setTab("timeline");
