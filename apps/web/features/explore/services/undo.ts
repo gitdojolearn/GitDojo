@@ -160,7 +160,10 @@ export function undoSuggestion(
   if (rebaseFinish) {
     // The commits a rebase replaced were left behind when it started.
     const start = events[rebaseStartOf(events, index)];
-    if (start?.leftBehind && start.leftBehind.recoveredBy === null) {
+    if (start?.leftBehind) {
+      if (start.leftBehind.recoveredBy) {
+        return { recoveredBy: start.leftBehind.recoveredBy, options: [], warning: null, notes: [] };
+      }
       lost = true;
       options.unshift(rescue(start.leftBehind.oid));
     }

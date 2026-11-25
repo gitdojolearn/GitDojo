@@ -123,6 +123,21 @@ describe("undoSuggestion", () => {
     expect(start?.warning).toBeNull();
   });
 
+  it("marks a finished rebase as already recovered when its pre-rebase commit was brought back", () => {
+    const { at } = suggestions(
+      [commit("b", ["a"]), commit("e", ["c"]), commit("c", ["a"]), commit("a")],
+      [
+        ["b", `reset: moving to ${sha("b")}`],
+        ["e", "rebase (finish): returning to refs/heads/feature"],
+        ["e", "rebase (pick): Commit b"],
+        ["c", "rebase (start): checkout main"],
+        ["b", "commit: Commit b"],
+        ["a", "commit (initial): Commit a"],
+      ],
+    );
+    expect(at(1)).toEqual({ recoveredBy: "HEAD@{0}", options: [], warning: null, notes: [] });
+  });
+
   it("creates and switches to a branch for commits left on a detached HEAD", () => {
     const { at } = suggestions(
       [commit("a")],
