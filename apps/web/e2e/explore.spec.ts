@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 let root: string;
@@ -78,6 +79,59 @@ test("opens a repository from disk and explains what happened in it", async ({ p
   await expect(commit).toContainText("login.js");
   await expect(commit).toContainText("+export function login() {}");
 });
+
+test("suggests how to undo a reset and copies the command", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.addInitScript(() => {
+    delete (window as { showDirectoryPicker?: unknown }).showDirectoryPicker;
+  });
+  await page.goto("/explore");
+  await page.getByTestId("explore-folder-input").setInputFiles(root);
+
+  const lost = execFileSync("git", ["rev-parse", "--short=7", "HEAD@{1}"], { cwd: root })
+    .toString()
+    .trim();
+  const timeline = page.getByTestId("explore-timeline");
+  // The newest step is the reset; its panel comes first and starts collapsed.
+  const panel = timeline.getByTestId("undo-panel").first();
+  await expect(panel.getByTestId("undo-option").first()).toBeHidden();
+  await panel.getByText("How to undo this").click();
+
+  const options = panel.getByTestId("undo-option");
+  await expect(options.first()).toContainText("Recommended");
+  await expect(options.first()).toContainText(`git branch rescue/${lost} ${lost}`);
+  await expect(options.nth(1)).toContainText(`git reset --keep ${lost}`);
+  await expect(panel).not.toContainText("--hard");
+
+  await options.first().getByRole("button", { name: "Copy command" }).click();
+  await expect(panel.getByRole("status")).toHaveText("Copied");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `git branch rescue/${lost} ${lost}`,
+  );
+});
+
+for (const theme of ["dark", "light"] as const) {
+  test(`the open undo panel has no detectable accessibility violations (${theme})`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript((value) => {
+      delete (window as { showDirectoryPicker?: unknown }).showDirectoryPicker;
+      localStorage.setItem("gitdojo:theme", value);
+    }, theme);
+    await page.goto("/explore");
+    await page.getByTestId("explore-folder-input").setInputFiles(root);
+    const panels = page.getByTestId("explore-timeline").getByTestId("undo-panel");
+    await expect(panels.first()).toBeVisible();
+    for (const summary of await panels.getByText("How to undo this").all()) await summary.click();
+
+    const { violations } = await new AxeBuilder({ page })
+      .include('[data-testid="explore-timeline"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(violations.map((violation) => violation.id)).toEqual([]);
+  });
+}
 
 test("says so when the folder is not a repository", async ({ page }) => {
   await page.addInitScript(() => {

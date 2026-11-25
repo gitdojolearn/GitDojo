@@ -22,6 +22,8 @@ import { renderInline } from "@/components/content/rich-text";
 import { formatTimestamp } from "@/lib/time";
 import { short } from "../services/ancestry";
 import { type TimelineEvent, type TimelineKind } from "../services/timeline";
+import { type UndoSuggestion, undoSuggestion } from "../services/undo";
+import { UndoPanel } from "./UndoPanel";
 
 const ICONS: Record<TimelineKind, LucideIcon> = {
   commit: GitCommitHorizontal,
@@ -49,19 +51,32 @@ const dayOf = (timestamp: number) =>
 const timeOf = (timestamp: number) =>
   new Date(timestamp * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
+/** The DOM id of a timeline step, so other parts of the explorer can bring it into view. */
+export const stepId = (selector: string) =>
+  `explore-step-${selector.replace(/\D/g, "") || "unknown"}`;
+
+/** Scrolls a timeline step into view and focuses it. */
+export function showStep(selector: string) {
+  const step = document.getElementById(stepId(selector));
+  step?.scrollIntoView({ block: "center" });
+  step?.querySelector("button")?.focus({ preventScroll: true });
+}
+
 function Step({
   event,
+  undo,
   selected,
   onSelect,
 }: {
   event: TimelineEvent;
+  undo: UndoSuggestion | null;
   selected: boolean;
   onSelect: (oid: string) => void;
 }) {
   const Icon = ICONS[event.kind];
   const left = event.leftBehind;
   return (
-    <li>
+    <li id={stepId(event.selector)} className="scroll-mt-8">
       <button
         type="button"
         disabled={!event.inGraph}
@@ -121,7 +136,7 @@ function Step({
                       `This left \`${short(left.oid)}\` behind; \`${left.recoveredBy}\` brought it back.`,
                     )
                   : renderInline(
-                      `\`${short(left.oid)}\` is now on no branch: only the reflog remembers it. \`git branch rescue ${short(left.oid)}\` would bring it back.`,
+                      `\`${short(left.oid)}\` is now on no branch: only the reflog remembers it.`,
                     )}
               </span>
             </span>
@@ -134,6 +149,7 @@ function Step({
           ) : null}
         </span>
       </button>
+      {undo ? <UndoPanel suggestion={undo} onShowStep={showStep} className="mt-1 ml-11" /> : null}
     </li>
   );
 }
@@ -144,10 +160,12 @@ function Step({
  */
 export function Timeline({
   events,
+  truncated,
   selectedOid,
   onSelect,
 }: {
   events: readonly TimelineEvent[];
+  truncated: boolean;
   selectedOid: string | null;
   onSelect: (oid: string) => void;
 }) {
@@ -178,6 +196,7 @@ export function Timeline({
               <Step
                 key={event.selector}
                 event={event}
+                undo={undoSuggestion(event, events, truncated)}
                 selected={event.oid === selectedOid}
                 onSelect={onSelect}
               />
